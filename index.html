@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="운행일보">
+<meta name="theme-color" content="#1f3864">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
+<title>운행일보</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: 엑셀 운행일보를 그대로 닮은 한 장짜리 표 + 아래 고정 "운행 추가" 버튼 + 바텀시트 입력창 */
+:root{
+  --bg:#eef1f6; --paper:#ffffff; --ink:#18202e; --muted:#5f6b80;
+  --navy:#1f3864; --navy-ink:#ffffff; --band:#3d6fc4; --band-ink:#ffffff;
+  --tint:#dbe4ee; --line:#c4cdda; --datecol:#7d8696; --datecol-ink:#ffffff;
+  --total:#8d939d; --accent:#2457b3; --danger:#c0392b; --chip:#e4eaf3;
+  --font:"IBM Plex Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --num:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f141c; --paper:#171e29; --ink:#e7ecf3; --muted:#9aa6b8;
+  --navy:#1a2c4f; --navy-ink:#f0f4fa; --band:#2c4f8c; --band-ink:#f0f4fa;
+  --tint:#1e2836; --line:#2d394b; --datecol:#3a4456; --datecol-ink:#e7ecf3;
+  --total:#3a4456; --accent:#7ea6ec; --danger:#ef7d6f; --chip:#243043; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f141c; --paper:#171e29; --ink:#e7ecf3; --muted:#9aa6b8;
+  --navy:#1a2c4f; --navy-ink:#f0f4fa; --band:#2c4f8c; --band-ink:#f0f4fa;
+  --tint:#1e2836; --line:#2d394b; --datecol:#3a4456; --datecol-ink:#e7ecf3;
+  --total:#3a4456; --accent:#7ea6ec; --danger:#ef7d6f; --chip:#243043; color-scheme:dark}
+
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;-webkit-text-size-adjust:100%}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;
+  padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));
+  padding-block:12px 110px}
+.wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.month{display:flex;align-items:center;gap:4px}
+.month button{border:0;background:var(--paper);width:40px;height:40px;border-radius:10px;font-size:18px;border:1px solid var(--line)}
+.month strong{font-size:17px;font-weight:700;min-width:118px;text-align:center}
+.store{font-size:12px;color:var(--muted)}
+
+.sheet{background:var(--paper);border:2px solid var(--navy);overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:340px;font-size:14px}
+caption{background:var(--navy);color:var(--navy-ink);font-weight:700;font-size:17px;padding:10px 6px;caption-side:top}
+caption button{background:none;border:0;color:inherit;font-weight:700;padding:0 2px;text-decoration:underline dotted;text-underline-offset:4px}
+th{background:var(--band);color:var(--band-ink);font-weight:600;padding:8px 4px;border:1px solid var(--line);font-size:13px;letter-spacing:.02em}
+td{border:1px solid var(--line);padding:9px 3px;text-align:center;font-weight:600;white-space:nowrap}
+tbody td,tfoot td{font-size:clamp(11px,3.4vw,14px)}
+th{white-space:nowrap}
+tbody tr:nth-child(even) td:not(.d){background:var(--tint)}
+tbody tr{cursor:pointer}
+tbody tr:active td{filter:brightness(.93)}
+td.d{background:var(--datecol);color:var(--datecol-ink);width:44px;line-height:1.1}
+td.d small{display:block;font-size:10px;font-weight:500;opacity:.85}
+td.n{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:clamp(11px,3.2vw,13.5px)}
+td.memo{font-size:12px;color:var(--muted);font-weight:500}
+td.empty{color:var(--muted);font-weight:500;padding:28px 8px;cursor:default}
+tfoot td{background:var(--total);color:#fff;font-weight:700}
+tfoot td.n{font-size:14px}
+
+.tools{display:flex;gap:8px;flex-wrap:wrap}
+.tools button{flex:1 1 140px;border:1px solid var(--line);background:var(--paper);border-radius:12px;padding:12px 10px;font-weight:600;font-size:14px}
+.hint{font-size:13px;color:var(--muted);line-height:1.6;margin:0}
+
+.fab{position:fixed;left:0;right:0;bottom:0;padding:10px max(16px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
+  background:linear-gradient(transparent,var(--bg) 35%);display:flex;justify-content:center;z-index:5}
+.fab button{width:100%;max-width:720px;border:0;background:var(--navy);color:var(--navy-ink);font-size:18px;font-weight:700;padding:16px;border-radius:14px;box-shadow:0 6px 18px rgba(20,30,60,.25)}
+
+.scrim{position:fixed;inset:0;background:rgba(10,14,22,.5);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.panel{background:var(--paper);width:100%;max-width:720px;border-radius:18px 18px 0 0;max-height:92%;overflow-y:auto;
+  padding:18px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:14px}
+.panel h2{margin:0;font-size:19px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid .full{grid-column:1/-1}
+label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted);min-width:0}
+input{font:inherit;font-size:17px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 12px;width:100%;min-width:0}
+input.num{font-family:var(--num)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{border:0;background:var(--chip);border-radius:999px;padding:6px 11px;font-size:13px;font-weight:600}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row button{flex:1 1 120px;border-radius:12px;padding:14px;font-weight:700;font-size:16px;border:1px solid var(--line);background:var(--paper)}
+.row .primary{background:var(--navy);color:var(--navy-ink);border-color:var(--navy)}
+.row .del{color:var(--danger);border-color:var(--danger)}
+.row .del.armed{background:var(--danger);color:#fff}
+.split{font-size:13px;color:var(--muted);background:var(--chip);border-radius:10px;padding:10px 12px;margin:0}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:999px;font-size:14px;font-weight:600;z-index:30}
+.seg{display:flex;background:var(--chip);border-radius:12px;padding:4px;gap:4px}
+.seg button{flex:1;border:0;background:none;border-radius:9px;padding:10px;font-weight:700;font-size:15px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--paper);color:var(--ink);box-shadow:0 1px 3px rgba(20,30,60,.15)}
+.routes{display:flex;flex-direction:column;gap:6px}
+.routes span{font-size:13px;font-weight:600;color:var(--muted)}
+.routes .chips button{background:var(--navy);color:var(--navy-ink);padding:8px 12px;font-size:14px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 10px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.tile span{font-size:12px;color:var(--muted);font-weight:600}
+.tile b{font-family:var(--num);font-size:20px;font-variant-numeric:tabular-nums}
+.tile small{font-size:12px;font-weight:600;color:var(--muted)}
+.tile small.up{color:var(--accent)}
+.box{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.box h3{margin:0;font-size:16px}
+.bar{display:grid;grid-template-columns:minmax(0,7.5em) 1fr auto;gap:8px;align-items:center;font-size:14px;font-weight:600}
+.bar .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar .track{height:12px;background:var(--chip);border-radius:6px;overflow:hidden}
+.bar .fill{height:100%;background:var(--band);border-radius:6px}
+.bar .val{font-family:var(--num);font-size:13px;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.bar .val em{font-style:normal;color:var(--muted);font-weight:500}
+@media (prefers-reduced-motion:no-preference){.panel{animation:up .18s ease-out}@keyframes up{from{transform:translateY(30px);opacity:.6}}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="top">
+    <div class="month">
+      <button id="prev" aria-label="이전 달">‹</button>
+      <strong id="monthLabel">2026년 10월</strong>
+      <button id="next" aria-label="다음 달">›</button>
+    </div>
+    <span class="store" id="store">불러오는 중…</span>
+  </div>
+
+  <div class="seg" role="group" aria-label="보기">
+    <button id="tabLog" aria-pressed="true">운행일보</button>
+    <button id="tabStat" aria-pressed="false">거래처 통계</button>
+  </div>
+
+  <div id="statView" hidden></div>
+
+  <div id="logView" class="wrap" style="max-width:none">
+  <div class="sheet">
+    <table>
+      <caption><button id="vehicleBtn">차량번호</button> <span id="capMonth">26년 10월</span> 운행일보</caption>
+      <thead><tr><th>날짜</th><th>상차지</th><th>하차지</th><th>상차수량</th><th>하차수량</th><th>계근비</th></tr></thead>
+      <tbody id="body"><tr><td class="empty" colspan="6">불러오는 중…</td></tr></tbody>
+      <tfoot><tr><td id="tCount">0</td><td colspan="2">합계</td><td class="n" id="tLoad">0.00</td><td class="n" id="tUnload">0.00</td><td class="n" id="tFee">0</td></tr></tfoot>
+    </table>
+  </div>
+
+  <p class="hint">줄을 누르면 고칠 수 있어요. 한 번 상차해서 두 곳에 나눠 내린 경우, 그 줄을 누르고 “하차지 추가”를 누르세요. 맨 아래 합계의 왼쪽 숫자는 운행 횟수예요.</p>
+  </div>
+  <div class="tools"><button id="exportBtn">내보내기 · 운행일보 + 통계 PDF</button></div>
+  <div class="tools">
+    <button id="backupBtn">백업 파일 저장</button>
+    <button id="restoreBtn">백업 불러오기</button>
+    <input id="restoreFile" type="file" accept=".json,application/json" hidden>
+  </div>
+  <p class="hint">기록은 이 휴대폰 안에만 저장돼요. 휴대폰을 바꾸거나 사파리 기록을 지우기 전에 “백업 파일 저장”을 눌러 파일을 보관해 두세요. 새 휴대폰에서 “백업 불러오기”로 그 파일을 고르면 기록이 돌아와요.</p>
+</div>
+
+<div class="fab"><button id="addBtn">+ 운행 추가</button></div>
+<div id="modal" hidden></div>
+<div id="toast" class="toast" hidden></div>
+
+<script src="jspdf.umd.min.js"></script>
+<script>
+(function(){
+  const WD=['일','월','화','수','목','금','토'];
+  const now=new Date();
+  let ym={y:now.getFullYear(),m:now.getMonth()+1};
+  let vehicle='';
+  let rows=[];           // 현재 달 기록
+  let db=null, unsubMonth=null, writing=Promise.resolve();
+  const LS='unhaeng-ilbo:';
+
+  const $=id=>document.getElementById(id);
+  const key=()=>`${ym.y}-${String(ym.m).padStart(2,'0')}`;
+  const f2=v=>(v==null||v==='')?'':Number(v).toFixed(2);
+  const won=v=>(v==null||v==='')?'':Number(v).toLocaleString('ko-KR');
+  const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const toNum=v=>{if(v===''||v==null)return null;const n=parseFloat(String(v).replace(/,/g,''));return isNaN(n)?null:n};
+
+  function toast(msg){const t=$('toast');t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,2000)}
+
+  /* ---------- 저장소: db (어느 기기에서나) → 없으면 이 기기에만 ---------- */
+  function lsGet(k){try{return JSON.parse(localStorage.getItem(LS+k)||'null')}catch(e){return null}}
+  function lsSet(k,v){try{localStorage.setItem(LS+k,JSON.stringify(v))}catch(e){}}
+
+  function saveMonth(){
+    const body={year:ym.y,month:ym.m,rows:rows};
+    if(!db){lsSet('logs/'+key(),body);return}
+    const ref=db.doc('logs/'+key());
+    writing=writing.then(()=>ref.set(body)).catch(e=>{
+      toast(e&&e.code==='quota_exceeded'?'저장 공간이 가득 찼어요':'저장하지 못했어요. 다시 시도해 주세요');
+    });
+  }
+  function saveVehicle(){
+    if(!db){lsSet('settings',{vehicle});return}
+    writing=writing.then(()=>db.doc('settings/main').set({vehicle})).catch(()=>toast('차량번호를 저장하지 못했어요'));
+  }
+
+  let prevRows=[], view='log';
+  const prevKey=()=>{let y=ym.y,m=ym.m-1;if(m<1){m=12;y--}return `${y}-${String(m).padStart(2,'0')}`};
+  function loadPrev(){
+    prevRows=[];const pk=prevKey();
+    if(!db){const b=lsGet('logs/'+pk);prevRows=(b&&b.rows)||[];return}
+    db.doc('logs/'+pk).get().then(s=>{
+      if(pk!==prevKey())return;
+      const d=s.exists?s.data():null;prevRows=d&&Array.isArray(d.rows)?d.rows:[];
+      if(view==='stat')renderStats();
+    }).catch(()=>{});
+  }
+
+  function openMonth(){
+    if(unsubMonth){unsubMonth();unsubMonth=null}
+    loadPrev();
+    render();
+    if(!db){const b=lsGet('logs/'+key());rows=(b&&b.rows)||[];render();return}
+    unsubMonth=db.doc('logs/'+key()).onSnapshot(s=>{
+      const d=s.exists?s.data():null;
+      rows=d&&Array.isArray(d.rows)?JSON.parse(JSON.stringify(d.rows)):[];
+      render();
+    },()=>{$('store').textContent='연결이 끊겼어요';});
+  }
+
+  /* ---------- 화면 그리기 ---------- */
+  function render(){
+    $('monthLabel').textContent=`${ym.y}년 ${ym.m}월`;
+    $('capMonth').textContent=`${String(ym.y).slice(2)}년 ${ym.m}월`;
+    $('vehicleBtn').textContent=vehicle||'차량번호';
+    const tb=$('body');
+    if(!rows.length){
+      tb.innerHTML='<tr><td class="empty" colspan="6">이번 달 기록이 아직 없어요.<br>아래 “+ 운행 추가”를 눌러 시작하세요.</td></tr>';
+    }else{
+      tb.innerHTML=rows.map((r,i)=>{
+        let d='';
+        if(r.d){const w=new Date(ym.y,ym.m-1,r.d).getDay();d=`${r.d}<small>${WD[w]}</small>`}
+        const fee=r.fee!=null?won(r.fee):'';
+        const feeCell=fee?`<td class="n">${fee}</td>`:`<td class="memo">${esc(r.note)}</td>`;
+        return `<tr data-i="${i}"><td class="d">${d}</td><td>${esc(r.from)}</td><td>${esc(r.to)}</td><td class="n">${f2(r.load)}</td><td class="n">${f2(r.unload)}</td>${feeCell}</tr>`;
+      }).join('');
+    }
+    const sum=k=>rows.reduce((a,r)=>a+(Number(r[k])||0),0);
+    $('tCount').textContent=rows.filter(r=>r.d).length;
+    $('tLoad').textContent=sum('load').toFixed(2);
+    $('tUnload').textContent=sum('unload').toFixed(2);
+    $('tFee').textContent=won(sum('fee'))||'0';
+    if(view==='stat')renderStats();
+    fitCells();
+  }
+
+  /* 칸보다 긴 글자는 한 줄에 들어가도록 글자만 작게 */
+  function fitCells(){
+    requestAnimationFrame(()=>{
+      document.querySelectorAll('#body td, tfoot td').forEach(td=>{
+        td.style.fontSize='';
+        let size=parseFloat(getComputedStyle(td).fontSize);
+        while(size>9&&td.scrollWidth>td.clientWidth){size-=0.5;td.style.fontSize=size+'px'}
+      });
+    });
+  }
+  let fitT;addEventListener('resize',()=>{clearTimeout(fitT);fitT=setTimeout(fitCells,150)});
+
+  /* ---------- 거래처 통계 ---------- */
+  // "삼주당진(27)" → "삼주당진", "kcc대죽" → "KCC대죽" 처럼 같은 곳은 하나로 셈
+  const place=s=>String(s||'').replace(/\(\s*\d+\s*\)\s*$/,'').trim().toUpperCase();
+  function tally(list,field,qty){
+    const m={};
+    list.forEach(r=>{const k=place(r[field]);if(!k)return;
+      m[k]=m[k]||{n:0,t:0};m[k].n++;m[k].t+=Number(r[qty])||0});
+    return Object.entries(m).sort((a,b)=>b[1].n-a[1].n||b[1].t-a[1].t);
+  }
+  function bars(entries,unit){
+    if(!entries.length)return '<p class="hint">아직 기록이 없어요.</p>';
+    const max=entries[0][1].n;
+    return entries.map(([k,v])=>`<div class="bar"><span class="name">${esc(k)}</span>
+      <span class="track"><span class="fill" style="display:block;width:${Math.max(6,v.n/max*100)}%"></span></span>
+      <span class="val">${v.n}회 <em>${v.t.toFixed(2)}${unit}</em></span></div>`).join('');
+  }
+  function summary(list){
+    const s=k=>list.reduce((a,r)=>a+(Number(r[k])||0),0);
+    return {n:list.filter(r=>r.d).length,load:s('load'),unload:s('unload')};
+  }
+  function delta(cur,prev,fix){
+    if(!prevRows.length)return '<small>지난달 기록 없음</small>';
+    const d=cur-prev;const t=fix?Math.abs(d).toFixed(fix):Math.abs(d);
+    if(Math.abs(d)<(fix?0.005:1))return '<small>지난달과 같음</small>';
+    return `<small class="${d>0?'up':''}">지난달보다 ${d>0?'▲':'▼'} ${t}</small>`;
+  }
+  function renderStats(){
+    const c=summary(rows),p=summary(prevRows);
+    $('statView').innerHTML=`<div class="wrap" style="max-width:none">
+      <div class="tiles">
+        <div class="tile"><span>운행</span><b>${c.n}회</b>${delta(c.n,p.n)}</div>
+        <div class="tile"><span>상차 합계</span><b>${c.load.toFixed(1)}</b>${delta(c.load,p.load,1)}</div>
+        <div class="tile"><span>하차 합계</span><b>${c.unload.toFixed(1)}</b>${delta(c.unload,p.unload,1)}</div>
+      </div>
+      <div class="box"><h3>하차지별</h3>${bars(tally(rows,'to','unload'),'t')}</div>
+      <div class="box"><h3>상차지별</h3>${bars(tally(rows.filter(r=>r.d),'from','load'),'t')}</div>
+      <p class="hint">나눠 내린 곳도 한 번씩 셉니다. 괄호 속 날짜는 빼고, 영어 대소문자가 달라도 같은 곳으로 묶어요. “울산유니드”와 “유니드울산”처럼 이름을 다르게 적으면 따로 세니까, 한 가지로 맞춰 적으면 더 정확해요.</p>
+    </div>`;
+  }
+  function statData(){
+    const c=summary(rows),p=summary(prevRows);
+    const out=[['구분','이번 달','지난달'],
+      ['운행 횟수',c.n,prevRows.length?p.n:''],
+      ['상차 합계',c.load.toFixed(2),prevRows.length?p.load.toFixed(2):''],
+      ['하차 합계',c.unload.toFixed(2),prevRows.length?p.unload.toFixed(2):''],
+      [],['하차지','횟수','하차수량']];
+    tally(rows,'to','unload').forEach(([k,v])=>out.push([k,v.n,v.t.toFixed(2)]));
+    out.push([],['상차지','횟수','상차수량']);
+    tally(rows.filter(r=>r.d),'from','load').forEach(([k,v])=>out.push([k,v.n,v.t.toFixed(2)]));
+    return out;
+  }
+  async function drawStats(){
+    const W=1240,H=1754,M=90;
+    const cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d');
+    const FONT='"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif';
+    try{await document.fonts.load('700 20px "IBM Plex Sans KR"')}catch(e){}
+    g.fillStyle='#fff';g.fillRect(0,0,W,H);
+    const cw=W-2*M,cols=[0.46,0.22,0.32].map(p=>p*cw);
+    const d=statData();const blocks=[];let cur=[];
+    d.forEach(r=>{if(!r.length){blocks.push(cur);cur=[]}else cur.push(r)});blocks.push(cur);
+    const lines=blocks.reduce((a,b)=>a+b.length,0);
+    const rh=Math.min(48,Math.floor((H-2*M-80-blocks.length*30)/lines));const fs=Math.round(Math.min(22,rh*.46));
+    let y=M;
+    g.fillStyle='#1f3864';g.fillRect(M,y,cw,70);g.fillStyle='#fff';g.font=`700 30px ${FONT}`;g.textAlign='center';g.textBaseline='middle';
+    g.fillText(`${vehicle} ${String(ym.y).slice(2)}년 ${ym.m}월 거래처 통계`,W/2,y+36);y+=70+20;
+    blocks.forEach(b=>{
+      b.forEach((r,ri)=>{
+        let x=M;
+        r.forEach((v,i)=>{
+          g.fillStyle=ri===0?'#4472c4':(ri%2?'#fff':'#d5e0ea');g.fillRect(x,y,cols[i],rh);
+          g.strokeStyle='#9aa5b5';g.lineWidth=1.5;g.strokeRect(x,y,cols[i],rh);
+          g.fillStyle=ri===0?'#fff':'#111';g.font=`${ri===0?700:600} ${fs}px ${FONT}`;
+          const s=(i===1&&ri>0&&v!=='')?v+'회':String(v);
+          g.fillText(i===1&&b[0][0]==='구분'?String(v):s,x+cols[i]/2,y+rh/2+1);x+=cols[i];
+        });
+        y+=rh;
+      });
+      y+=30;
+    });
+    return cv;
+  }
+  function setView(v){
+    view=v;
+    $('tabLog').setAttribute('aria-pressed',v==='log');
+    $('tabStat').setAttribute('aria-pressed',v==='stat');
+    $('logView').hidden=v!=='log';$('statView').hidden=v!=='stat';
+    document.querySelector('.fab').hidden=v!=='log';
+    if(v==='stat')renderStats();
+  }
+
+  /* 자주 다니는 노선 (이번 달 + 지난달 기록에서 많이 다닌 순) */
+  function frequentRoutes(){
+    const c={};
+    [...prevRows,...rows].forEach(r=>{
+      if(!r.d||!(r.from||'').trim()||!(r.to||'').trim())return;
+      const from=r.from.trim(),to=r.to.replace(/\(\s*\d+\s*\)\s*$/,'').trim();
+      const k=place(from)+'→'+place(to);
+      c[k]=c[k]||{from,to,n:0};c[k].n++;c[k].from=from;c[k].to=to;
+    });
+    return Object.values(c).sort((a,b)=>b.n-a.n).slice(0,6);
+  }
+
+  /* 자주 쓰는 장소 (지금까지 기록에서 많이 나온 순) */
+  function frequent(field){
+    const c={};rows.forEach(r=>{const v=(r[field]||'').trim();if(v)c[v]=(c[v]||0)+1});
+    return Object.keys(c).sort((a,b)=>c[b]-c[a]).slice(0,8);
+  }
+
+  /* ---------- 입력창 ---------- */
+  // mode: 'new' | 'edit' | 'split'
+  function openForm(mode,idx){
+    const editing=mode==='edit'?rows[idx]:null;
+    const isSplit=mode==='split'||(editing&&!editing.d);
+    const lastD=rows.reduce((a,r)=>r.d?Math.max(a,r.d):a,0);
+    const today=(now.getFullYear()===ym.y&&now.getMonth()+1===ym.m)?now.getDate():(lastD||1);
+    const r=editing||{d:isSplit?null:today,from:'',to:'',load:null,unload:null,fee:null,note:''};
+    const days=new Date(ym.y,ym.m,0).getDate();
+    const chips=(f,target)=>frequent(f).map(v=>`<button type="button" data-fill="${target}" data-v="${esc(v)}">${esc(v)}</button>`).join('');
+    const m=$('modal');
+    m.innerHTML=`<div class="scrim"><form class="panel" id="frm" autocomplete="off">
+      <h2>${editing?'운행 고치기':(isSplit?'하차지 추가':'운행 추가')}</h2>
+      ${isSplit?'<p class="split">한 번 실은 짐을 나눠 내린 곳이에요. 날짜와 상차는 위 줄과 같아서 비워 둡니다.</p>':''}
+      ${(!isSplit&&!editing&&frequentRoutes().length)?`<div class="routes"><span>자주 다니는 노선 · 누르면 바로 채워져요</span>
+        <div class="chips">${frequentRoutes().map(rt=>`<button type="button" data-route="${esc(rt.from)}|${esc(rt.to)}">${esc(rt.from)} → ${esc(rt.to)}</button>`).join('')}</div></div>`:''}
+      <div class="grid">
+        ${isSplit?'':`<label>날짜 (일)<input id="fD" class="num" type="number" inputmode="numeric" min="1" max="${days}" value="${r.d??''}" required></label>
+        <label>상차지<input id="fFrom" value="${esc(r.from)}" placeholder="예: TDI"></label>
+        <div class="chips full">${chips('from','fFrom')}</div>`}
+        <label class="full">하차지<input id="fTo" value="${esc(r.to)}" placeholder="예: 금성이엔씨"></label>
+        <div class="chips full">${chips('to','fTo')}</div>
+        ${isSplit?'':`<label>상차수량 (톤)<input id="fLoad" class="num" inputmode="decimal" value="${r.load??''}" placeholder="23.05"></label>`}
+        <label>하차수량 (톤)<input id="fUnload" class="num" inputmode="decimal" value="${r.unload??''}" placeholder="${isSplit?'9.40':'비우면 상차수량'}"></label>
+        <label>계근비 (원)<input id="fFee" class="num" inputmode="numeric" value="${r.fee??''}" placeholder="없으면 비움"></label>
+        <label>메모<input id="fNote" value="${esc(r.note)}" placeholder="예: 상차수량"></label>
+      </div>
+      <div class="row">
+        <button type="button" id="cancel">닫기</button>
+        <button type="submit" class="primary">저장</button>
+      </div>
+      ${editing?`<div class="row">
+        ${!isSplit?'<button type="button" id="addSplit">이 운행에 하차지 추가</button>':''}
+        <button type="button" class="del" id="del">삭제</button></div>`:''}
+    </form></div>`;
+    m.hidden=false;
+    const close=()=>{m.hidden=true;m.innerHTML=''};
+    m.querySelector('.scrim').addEventListener('click',e=>{if(e.target.classList.contains('scrim'))close()});
+    $('cancel').onclick=close;
+    m.querySelectorAll('[data-fill]').forEach(b=>b.onclick=()=>{$(b.dataset.fill).value=b.dataset.v});
+    m.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>{
+      const [f,t]=b.dataset.route.split('|');$('fFrom').value=f;$('fTo').value=t;
+      const l=$('fLoad');if(l){l.focus()}
+    });
+    if(editing){
+      const del=$('del');
+      del.onclick=()=>{
+        if(!del.classList.contains('armed')){del.classList.add('armed');del.textContent='한 번 더 누르면 삭제';return}
+        rows.splice(idx,1);saveMonth();render();close();toast('삭제했어요');
+      };
+      const sp=$('addSplit');
+      if(sp)sp.onclick=()=>{close();openForm('split',idx)};
+    }
+    $('frm').onsubmit=e=>{
+      e.preventDefault();
+      const val=id=>{const el=$(id);return el?el.value.trim():''};
+      const n={
+        d:isSplit?null:Math.min(days,Math.max(1,parseInt(val('fD'),10)||today)),
+        from:isSplit?'':val('fFrom'),
+        to:val('fTo'),
+        load:isSplit?null:toNum(val('fLoad')),
+        unload:toNum(val('fUnload')),
+        fee:toNum(val('fFee')),
+        note:val('fNote')
+      };
+      if(!isSplit&&n.unload==null&&n.load!=null&&mode==='new')n.unload=n.load;
+      if(mode==='edit'){
+        rows[idx]=n;
+        if(!isSplit&&editing.d!==n.d){ // 날짜가 바뀌면 딸린 하차지와 함께 자리 옮김
+          let end=idx+1;while(end<rows.length&&!rows[end].d)end++;
+          const grp=rows.splice(idx,end-idx);insertGroup(grp);
+        }
+      }else if(mode==='split'){
+        let at=idx+1;while(at<rows.length&&!rows[at].d)at++;
+        rows.splice(at,0,n);
+      }else insertGroup([n]);
+      saveMonth();render();close();toast('저장했어요');
+    };
+    setTimeout(()=>{const f=$(isSplit?'fTo':'fFrom');if(f&&!editing)f.focus()},50);
+  }
+
+  // 날짜 순서에 맞는 자리에 넣기 (같은 날이면 그날 마지막 뒤)
+  function insertGroup(grp){
+    const d=grp[0].d;let at=rows.length;
+    for(let i=0;i<rows.length;i++){if(rows[i].d&&rows[i].d>d){at=i;break}}
+    rows.splice(at,0,...grp);
+  }
+
+  /* ---------- 내보내기 ---------- */
+  function tableData(){
+    const head=['날짜','상차지','하차지','상차수량','하차수량','계근비'];
+    const body=rows.map(r=>[r.d??'',r.from||'',r.to||'',f2(r.load),f2(r.unload),r.fee!=null?r.fee:(r.note||'')]);
+    const sum=k=>rows.reduce((a,r)=>a+(Number(r[k])||0),0);
+    body.push([rows.filter(r=>r.d).length,'합계','',sum('load').toFixed(2),sum('unload').toFixed(2),sum('fee')]);
+    return [head,...body];
+  }
+  function copyText(txt){
+    const fallback=()=>{const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();
+      let ok=false;try{ok=document.execCommand('copy')}catch(e){}ta.remove();toast(ok?'복사했어요. 시트에 붙여넣으세요':'복사가 막혀 있어요. 엑셀 파일로 저장을 써 주세요')};
+    try{navigator.clipboard.writeText(txt).then(()=>toast('복사했어요. 시트에 붙여넣으세요'),fallback)}catch(e){fallback()}
+  }
+  const downloads={save({filename,data}){
+    const type=filename.endsWith('.pdf')?'application/pdf':filename.endsWith('.json')?'application/json':'text/csv';
+    const blob=new Blob([data],{type});
+    const file=new File([blob],filename,{type});
+    if(navigator.canShare&&navigator.canShare({files:[file]})&&/iPhone|iPad|Android/i.test(navigator.userAgent)){
+      return navigator.share({files:[file],title:filename}).then(()=>({status:'saved'}),e=>{if(e&&e.name==='AbortError')throw {code:'declined'};throw e});
+    }
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;
+    document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
+    return Promise.resolve({status:'saved'});
+  }};
+  async function saveCsv(data,filename,title){
+    if(!downloads){toast('이 화면에서는 파일 저장이 안 돼요. 복사를 써 주세요');return}
+    const csv='﻿'+[[title],...data]
+      .map(r=>r.map(c=>{c=String(c);return /[",\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c}).join(',')).join('\r\n');
+    try{await downloads.save({filename,data:csv});toast('저장했어요')}
+    catch(e){if(e&&e.code!=='declined')toast('파일을 저장하지 못했어요')}
+  }
+
+
+  /* ---------- PDF: A4 한 장에 엑셀 모양 그대로 그리기 ---------- */
+  async function drawSheet(){
+    const W=1240,H=1754,M=70;               // A4 150dpi
+    const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+    const g=cv.getContext('2d');
+    const FONT='"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif';
+    try{await document.fonts.load('700 20px "IBM Plex Sans KR"');await document.fonts.load('600 20px "IBM Plex Sans KR"')}catch(e){}
+    g.fillStyle='#fff';g.fillRect(0,0,W,H);
+    const data=tableData();const body=data.slice(1,-1);const foot=data[data.length-1];
+    const cols=[0.09,0.19,0.24,0.16,0.16,0.16].map(p=>p*(W-2*M));
+    const titleH=70,headH=54,footGap=24;
+    const rowH=Math.min(50,Math.floor((H-2*M-titleH-headH-footGap-50)/Math.max(body.length,1)));
+    const fs=Math.round(Math.min(22,rowH*0.46));
+    let y=M;
+    const cells=(vals,top,h,style)=>{
+      let x=M;
+      vals.forEach((v,i)=>{
+        g.fillStyle=style.bg(i);g.fillRect(x,top,cols[i],h);
+        g.strokeStyle='#9aa5b5';g.lineWidth=1.5;g.strokeRect(x,top,cols[i],h);
+        g.fillStyle=style.fg(i);g.font=`${style.w} ${style.fs}px ${FONT}`;g.textAlign='center';g.textBaseline='middle';
+        const s=String(v??'');let f=style.fs;
+        while(f>10&&g.measureText(s).width>cols[i]-12){f--;g.font=`${style.w} ${f}px ${FONT}`}
+        g.fillText(s,x+cols[i]/2,top+h/2+1);x+=cols[i];
+      });
+    };
+    // 제목
+    g.fillStyle='#1f3864';g.fillRect(M,y,W-2*M,titleH);
+    g.fillStyle='#fff';g.font=`700 30px ${FONT}`;g.textAlign='center';g.textBaseline='middle';
+    g.fillText(`${vehicle} ${String(ym.y).slice(2)}년 ${ym.m}월 운행일보`,W/2,y+titleH/2+1);y+=titleH;
+    cells(data[0],y,headH,{bg:()=>'#4472c4',fg:()=>'#fff',w:600,fs:22});y+=headH;
+    body.forEach((r,ri)=>{
+      cells(r,y,rowH,{bg:i=>i===0?'#7f7f7f':(ri%2?'#d5e0ea':'#fff'),fg:i=>i===0?'#fff':'#111',w:600,fs});
+      y+=rowH;
+    });
+    g.strokeStyle='#1f3864';g.lineWidth=3;g.strokeRect(M,M,W-2*M,y-M);
+    y+=footGap;
+    const f=[foot[0],'합계','',foot[3],foot[4],Number(foot[5]).toLocaleString('ko-KR')];
+    cells(f,y,50,{bg:()=>'#8d939d',fg:()=>'#fff',w:700,fs:22});
+    // 합계 칸 가운데 줄 지우고 글자 다시
+    g.fillStyle='#8d939d';g.fillRect(M+cols[0]+1,y+1.5,cols[1]+cols[2]-2,47);
+    g.fillStyle='#fff';g.font=`700 22px ${FONT}`;g.fillText('합계',M+cols[0]+(cols[1]+cols[2])/2,y+26);
+    return cv;
+  }
+  async function savePdf(draws,filename){
+    if(!downloads){toast('이 화면에서는 파일 저장이 안 돼요');return}
+    if(!window.jspdf){toast('PDF 도구를 불러오지 못했어요. 다시 열어 주세요');return}
+    if(!rows.length){toast('이번 달 기록이 없어요');return}
+    toast('PDF 만드는 중…');
+    try{
+      const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+      for(let i=0;i<draws.length;i++){
+        const cv=await draws[i]();
+        if(i>0)pdf.addPage();
+        pdf.addImage(cv.toDataURL('image/png'),'PNG',0,0,210,297);
+      }
+      await downloads.save({filename,data:pdf.output('arraybuffer')});
+      toast('저장했어요');
+    }catch(e){if(!(e&&e.code==='declined'))toast('PDF를 저장하지 못했어요')}
+  }
+  $('exportBtn').onclick=()=>savePdf([drawSheet,drawStats],`${vehicle}_${key()}_운행일보.pdf`);
+
+  /* ---------- 차량번호 ---------- */
+  $('vehicleBtn').onclick=()=>{
+    const m=$('modal');
+    m.innerHTML=`<div class="scrim"><form class="panel" id="vf"><h2>차량번호</h2>
+      ${vehicle?"":`<p class="split">처음 오셨네요. 차량번호를 넣으면 표 제목과 PDF 파일 이름에 들어가요. 나중에 표 제목의 번호를 누르면 바꿀 수 있어요.</p>`}<label>차량번호 (예: 5273)<input id="fVeh" value="${esc(vehicle)}" inputmode="numeric"></label>
+      <div class="row"><button type="button" id="vc">닫기</button><button class="primary" type="submit">저장</button></div></form></div>`;
+    m.hidden=false;
+    const close=()=>{m.hidden=true;m.innerHTML=''};
+    $('vc').onclick=close;
+    $('vf').onsubmit=e=>{e.preventDefault();const v=$('fVeh').value.trim();if(v){vehicle=v;saveVehicle();render()}close()};
+  };
+
+  $('addBtn').onclick=()=>openForm('new');
+  $('tabLog').onclick=()=>setView('log');
+  $('tabStat').onclick=()=>setView('stat');
+  $('body').addEventListener('click',e=>{const tr=e.target.closest('tr[data-i]');if(tr)openForm('edit',+tr.dataset.i)});
+  $('prev').onclick=()=>{ym.m--;if(ym.m<1){ym.m=12;ym.y--}openMonth()};
+  $('next').onclick=()=>{ym.m++;if(ym.m>12){ym.m=1;ym.y++}openMonth()};
+
+  /* ---------- 백업 ---------- */
+  $('backupBtn').onclick=async()=>{
+    const all={};
+    try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith(LS))all[k.slice(LS.length)]=JSON.parse(localStorage.getItem(k))}}catch(e){}
+    const d=new Date();const stamp=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+    try{await downloads.save({filename:`운행일보_백업_${vehicle||'차량'}_${stamp}.json`,data:JSON.stringify({app:'unhaeng-ilbo',v:1,data:all})});toast('백업 파일을 만들었어요')}
+    catch(e){if(!(e&&e.code==='declined'))toast('백업 파일을 만들지 못했어요')}
+  };
+  $('restoreBtn').onclick=()=>$('restoreFile').click();
+  $('restoreFile').onchange=e=>{
+    const f=e.target.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=()=>{
+      try{
+        const j=JSON.parse(r.result);
+        if(!j||j.app!=='unhaeng-ilbo'||!j.data)throw 0;
+        Object.entries(j.data).forEach(([k,v])=>lsSet(k,v));
+        const st=lsGet('settings');if(st&&st.vehicle)vehicle=st.vehicle;
+        openMonth();toast('백업을 불러왔어요');
+      }catch(err){toast('운행일보 백업 파일이 아니에요')}
+      e.target.value='';
+    };
+    r.readAsText(f);
+  };
+
+  /* ---------- 시작 ---------- */
+  $('store').textContent='이 휴대폰에 저장돼요';
+  const st=lsGet('settings');if(st&&st.vehicle)vehicle=st.vehicle;
+  openMonth();
+  if(!vehicle)$('vehicleBtn').click();
+})();
+</script>
+</body>
+</html>
