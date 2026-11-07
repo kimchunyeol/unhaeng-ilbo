@@ -141,6 +141,12 @@ input.num{font-family:var(--num)}
     <button id="tabStat" aria-pressed="false">거래처 통계</button>
   </div>
 
+  <div id="moveBox" class="box" hidden>
+    <h3>이 휴대폰에 저장된 기록이 있어요</h3>
+    <p class="hint" id="moveMsg">로그인하기 전에 이 휴대폰에 적어 둔 기록이에요. 아래 버튼을 누르면 인터넷 보관함으로 올라가서 맥미니에서도 보여요. 보관함에 이미 있는 달은 덮어쓰지 않아요.</p>
+    <div class="tools"><button id="moveBtn">이 휴대폰 기록 보관함에 올리기</button></div>
+  </div>
+
   <div id="statView" hidden></div>
 
   <div id="logView" class="wrap" style="max-width:none">
@@ -639,7 +645,30 @@ input.num{font-family:var(--num)}
     appId:"1:335840842968:web:3fc040c5d0cb539e0ff3ad"
   };
   let fs=null,user=null,unsubVeh=null;
+  function localMonths(){return Object.entries(localAll()).filter(([k,v])=>k.startsWith('logs/')&&v&&Array.isArray(v.rows)&&v.rows.length)}
+  function showMove(e){
+    if(!localMonths().length)return;
+    $('moveBox').hidden=false;
+    if(e){const code=(e&&e.code)||'';
+      $('moveMsg').textContent=code==='permission-denied'?'보관함에 올리지 못했어요. 파이어베이스 Firestore 규칙(6단계)이 아직 안 들어갔거나, 로그인한 이메일이 규칙의 이메일과 달라요.'
+        :(code==='not-found'||code==='failed-precondition')?'보관함에 올리지 못했어요. 파이어베이스에서 Firestore 데이터베이스(5단계)가 아직 만들어지지 않았어요.'
+        :code==='unavailable'?'인터넷에 연결되지 않았어요. 연결된 뒤 아래 버튼을 다시 눌러 주세요.'
+        :`보관함에 올리지 못했어요 (${code||'알 수 없는 오류'}). 아래 버튼을 다시 눌러 보세요.`;
+      $('moveMsg').style.color='var(--danger)';
+    }
+  }
+  $('moveBtn').onclick=async()=>{
+    if(!user)return;
+    const b=$('moveBtn');b.disabled=true;b.textContent='올리는 중…';
+    try{
+      const n=await writeCloud(localMonths(),true);
+      const st=lsGet('settings');if(st&&st.vehicle&&!vehicle){vehicle=st.vehicle;saveVehicle()}
+      $('moveBox').hidden=true;toast(n?`${n}달 치 기록을 보관함에 올렸어요`:'보관함에 이미 다 있어요');openMonth();
+    }catch(e){showMove(e)}
+    b.disabled=false;b.textContent='이 휴대폰 기록 보관함에 올리기';
+  };
   function useLocal(){
+    $('moveBox').hidden=true;
     db=null;user=null;
     if(unsubVeh){unsubVeh();unsubVeh=null}
     $('store').textContent='이 기기에만 저장 중';
@@ -665,7 +694,8 @@ input.num{font-family:var(--num)}
       vehicle=cloudVeh||localVeh||vehicle;
       if(vehicle&&vehicle!==cloudVeh)await stRef.set({vehicle},{merge:true});
       if(n)toast(`이 기기 기록 ${n}달 치를 보관함에 올렸어요`);
-    }catch(e){toast('보관함에 연결하지 못했어요. 인터넷 연결을 확인해 주세요')}
+      $('moveBox').hidden=true;
+    }catch(e){showMove(e)}
     if(unsubVeh)unsubVeh();
     unsubVeh=fs.doc(base+'settings/main').onSnapshot(s=>{if(s.exists&&s.data().vehicle){vehicle=s.data().vehicle;render()}},()=>{});
     openMonth();
