@@ -49,6 +49,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline
 .month button{border:0;background:var(--paper);width:40px;height:40px;border-radius:10px;font-size:18px;border:1px solid var(--line)}
 .month strong{font-size:17px;font-weight:700;min-width:118px;text-align:center}
 .store{font-size:12px;color:var(--muted)}
+.acct{display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:0}
+.authbtn{border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700;color:var(--accent)}
+.authbtn.out{color:var(--muted);font-weight:500;padding:3px 10px;font-size:12px}
 
 .sheet{background:var(--paper);border:2px solid var(--navy);overflow-x:auto}
 table{border-collapse:collapse;width:100%;min-width:340px;font-size:14px}
@@ -127,7 +130,10 @@ input.num{font-family:var(--num)}
       <strong id="monthLabel">2026년 10월</strong>
       <button id="next" aria-label="다음 달">›</button>
     </div>
-    <span class="store" id="store">불러오는 중…</span>
+    <div class="acct">
+      <span class="store" id="store">불러오는 중…</span>
+      <button id="authBtn" class="authbtn" hidden>구글 로그인</button>
+    </div>
   </div>
 
   <div class="seg" role="group" aria-label="보기">
@@ -155,7 +161,7 @@ input.num{font-family:var(--num)}
     <button id="restoreBtn">백업 불러오기</button>
     <input id="restoreFile" type="file" accept=".json,application/json" hidden>
   </div>
-  <p class="hint">기록은 이 휴대폰 안에만 저장돼요. 휴대폰을 바꾸거나 사파리 기록을 지우기 전에 “백업 파일 저장”을 눌러 파일을 보관해 두세요. 새 휴대폰에서 “백업 불러오기”로 그 파일을 고르면 기록이 돌아와요.</p>
+  <p class="hint" id="storeHint">구글로 로그인하면 기록이 인터넷 보관함에 저장돼서 휴대폰과 맥미니에서 같은 기록이 보여요. 신호가 없는 곳에서 적어도 나중에 연결되면 알아서 올라가요. 백업 파일은 만일을 위한 예비본이에요.</p>
 </div>
 
 <div class="fab"><button id="addBtn">+ 운행 추가</button></div>
@@ -163,6 +169,9 @@ input.num{font-family:var(--num)}
 <div id="toast" class="toast" hidden></div>
 
 <script src="jspdf.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
 (function(){
   const WD=['일','월','화','수','목','금','토'];
@@ -571,9 +580,33 @@ input.num{font-family:var(--num)}
   $('next').onclick=()=>{ym.m++;if(ym.m>12){ym.m=1;ym.y++}openMonth()};
 
   /* ---------- 백업 ---------- */
-  $('backupBtn').onclick=async()=>{
+  function localAll(){
     const all={};
     try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith(LS))all[k.slice(LS.length)]=JSON.parse(localStorage.getItem(k))}}catch(e){}
+    return all;
+  }
+  async function cloudAll(){
+    const all={};
+    const qs=await fs.collection(`users/${user.uid}/logs`).get();
+    qs.forEach(d=>{all['logs/'+d.id]=d.data()});
+    const st=await fs.doc(`users/${user.uid}/settings/main`).get();
+    if(st.exists)all.settings={vehicle:st.data().vehicle||''};
+    return all;
+  }
+  async function writeCloud(entries,onlyMissing){
+    const batch=fs.batch();let n=0;
+    for(const [k,v] of entries){
+      if(!k.startsWith('logs/')||!v||!Array.isArray(v.rows))continue;
+      const ref=fs.doc(`users/${user.uid}/${k}`);
+      if(onlyMissing){const ex=await ref.get();if(ex.exists&&(ex.data().rows||[]).length)continue}
+      batch.set(ref,{year:v.year,month:v.month,rows:v.rows});n++;
+    }
+    if(n)await batch.commit();
+    return n;
+  }
+  $('backupBtn').onclick=async()=>{
+    let all;
+    try{all=user?await cloudAll():localAll()}catch(e){toast('기록을 읽지 못했어요. 인터넷 연결을 확인해 주세요');return}
     const d=new Date();const stamp=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
     try{await downloads.save({filename:`운행일보_백업_${vehicle||'차량'}_${stamp}.json`,data:JSON.stringify({app:'unhaeng-ilbo',v:1,data:all})});toast('백업 파일을 만들었어요')}
     catch(e){if(!(e&&e.code==='declined'))toast('백업 파일을 만들지 못했어요')}
@@ -582,24 +615,100 @@ input.num{font-family:var(--num)}
   $('restoreFile').onchange=e=>{
     const f=e.target.files[0];if(!f)return;
     const r=new FileReader();
-    r.onload=()=>{
+    r.onload=async()=>{
       try{
         const j=JSON.parse(r.result);
         if(!j||j.app!=='unhaeng-ilbo'||!j.data)throw 0;
-        Object.entries(j.data).forEach(([k,v])=>lsSet(k,v));
-        const st=lsGet('settings');if(st&&st.vehicle)vehicle=st.vehicle;
+        if(j.data.settings&&j.data.settings.vehicle){vehicle=j.data.settings.vehicle;saveVehicle()}
+        if(user){await writeCloud(Object.entries(j.data),false)}
+        else Object.entries(j.data).forEach(([k,v])=>lsSet(k,v));
         openMonth();toast('백업을 불러왔어요');
-      }catch(err){toast('운행일보 백업 파일이 아니에요')}
+      }catch(err){toast(err===0?'운행일보 백업 파일이 아니에요':'백업을 불러오지 못했어요')}
       e.target.value='';
     };
     r.readAsText(f);
   };
 
+  /* ---------- 로그인 · 인터넷 보관함 (파이어베이스) ---------- */
+  const firebaseConfig={
+    apiKey:"AIzaSyBuwqlUgJghzcSq_ODpeUnaqJaU335MhPw",
+    authDomain:"unhaeng-ilbo.firebaseapp.com",
+    projectId:"unhaeng-ilbo",
+    storageBucket:"unhaeng-ilbo.firebasestorage.app",
+    messagingSenderId:"335840842968",
+    appId:"1:335840842968:web:3fc040c5d0cb539e0ff3ad"
+  };
+  let fs=null,user=null,unsubVeh=null;
+  function useLocal(){
+    db=null;user=null;
+    if(unsubVeh){unsubVeh();unsubVeh=null}
+    $('store').textContent='이 기기에만 저장 중';
+    const b=$('authBtn');b.hidden=!fs;b.className='authbtn';b.textContent='구글 로그인 · 휴대폰·맥미니 맞추기';
+    const st=lsGet('settings');if(st&&st.vehicle)vehicle=st.vehicle;
+    openMonth();
+    if(!vehicle)$('vehicleBtn').click();
+  }
+  async function useCloud(u){
+    user=u;
+    const base=`users/${u.uid}/`;
+    db={doc:p=>fs.doc(base+p)};
+    $('store').textContent='자동 저장 · 휴대폰·맥미니 같이';
+    const b=$('authBtn');b.hidden=false;b.className='authbtn out';b.textContent='로그아웃';
+    // 처음 로그인하면 이 기기에 있던 기록을 보관함으로 옮김 (보관함에 이미 있는 달은 건드리지 않음)
+    try{
+      const stRef=fs.doc(base+'settings/main');
+      const st=await stRef.get();
+      const cloudVeh=st.exists?st.data().vehicle:'';
+      const local=localAll();
+      const n=await writeCloud(Object.entries(local),true);
+      const localVeh=local.settings&&local.settings.vehicle;
+      vehicle=cloudVeh||localVeh||vehicle;
+      if(vehicle&&vehicle!==cloudVeh)await stRef.set({vehicle},{merge:true});
+      if(n)toast(`이 기기 기록 ${n}달 치를 보관함에 올렸어요`);
+    }catch(e){toast('보관함에 연결하지 못했어요. 인터넷 연결을 확인해 주세요')}
+    if(unsubVeh)unsubVeh();
+    unsubVeh=fs.doc(base+'settings/main').onSnapshot(s=>{if(s.exists&&s.data().vehicle){vehicle=s.data().vehicle;render()}},()=>{});
+    openMonth();
+    if(!vehicle)$('vehicleBtn').click();
+  }
+  $('authBtn').onclick=async()=>{
+    if(user){
+      const b=$('authBtn');
+      if(!b.dataset.armed){b.dataset.armed='1';b.textContent='한 번 더 누르면 로그아웃';setTimeout(()=>{delete b.dataset.armed;if(user)b.textContent='로그아웃'},3000);return}
+      delete b.dataset.armed;await firebase.auth().signOut();return;
+    }
+    const prov=new firebase.auth.GoogleAuthProvider();prov.setCustomParameters({prompt:'select_account'});
+    try{await firebase.auth().signInWithPopup(prov)}
+    catch(e){
+      if(e&&(e.code==='auth/popup-blocked'||e.code==='auth/operation-not-supported-in-this-environment'||e.code==='auth/cancelled-popup-request')){
+        try{await firebase.auth().signInWithRedirect(prov)}catch(e2){toast('로그인하지 못했어요')}
+      }else if(!(e&&e.code==='auth/popup-closed-by-user'))toast('로그인하지 못했어요');
+    }
+  };
+
   /* ---------- 시작 ---------- */
-  $('store').textContent='이 휴대폰에 저장돼요';
-  const st=lsGet('settings');if(st&&st.vehicle)vehicle=st.vehicle;
-  openMonth();
-  if(!vehicle)$('vehicleBtn').click();
+  $('store').textContent='불러오는 중…';
+  {const st=lsGet('settings');if(st&&st.vehicle)vehicle=st.vehicle;}
+  render();
+  if(window.firebase){
+    try{
+      firebase.initializeApp(firebaseConfig);
+      fs=firebase.firestore();
+      fs.enablePersistence({synchronizeTabs:true}).catch(()=>{});
+      firebase.auth().getRedirectResult().catch(()=>{});
+      let first=true;
+      firebase.auth().onAuthStateChanged(u=>{
+        if(u){
+          useCloud(u).catch(()=>{});
+          if(!first)toast('로그인했어요');
+        }else{
+          if(!first&&unsubMonth){unsubMonth();unsubMonth=null}
+          useLocal();
+        }
+        first=false;
+      });
+    }catch(e){fs=null;useLocal()}
+  }else useLocal();
 })();
 </script>
 </body>
