@@ -150,7 +150,7 @@ input.num{font-family:var(--num)}
   <div id="statView" hidden></div>
 
   <div id="logView" class="wrap" style="max-width:none">
-  <p class="hint">줄을 누르면 고칠 수 있어요. 두 곳에 나눠 내렸으면 그 줄을 누르고 <b>“이 운행에 하차지 추가”</b>를 누르세요. 합계 왼쪽 숫자는 운행 횟수예요.</p>
+  <p class="hint">줄을 누르면 고칠 수 있어요. 두 곳에 나눠 내렸으면 그 줄을 누르고 <b>“이 운행에 하차지 추가”</b>를 누르세요. 합계 왼쪽 숫자는 일한 날수예요. 같은 날 여러 번 운행해도 하루로 세요.</p>
   <div class="sheet">
     <table>
       <caption><button id="vehicleBtn">차량번호</button> <span id="capMonth">26년 10월</span> 운행일보</caption>
@@ -239,6 +239,8 @@ input.num{font-family:var(--num)}
   }
 
   /* ---------- 화면 그리기 ---------- */
+  // 합계 왼쪽 숫자: 같은 날 여러 번 운행해도 하루로 셈 (일한 날수)
+  const dayCount=list=>new Set(list.filter(r=>r.d).map(r=>r.d)).size;
   function render(){
     $('monthLabel').textContent=`${ym.y}년 ${ym.m}월`;
     $('capMonth').textContent=`${String(ym.y).slice(2)}년 ${ym.m}월`;
@@ -256,7 +258,7 @@ input.num{font-family:var(--num)}
       }).join('');
     }
     const sum=k=>rows.reduce((a,r)=>a+(Number(r[k])||0),0);
-    $('tCount').textContent=rows.filter(r=>r.d).length;
+    $('tCount').textContent=dayCount(rows);
     $('tLoad').textContent=sum('load').toFixed(2);
     $('tUnload').textContent=sum('unload').toFixed(2);
     $('tFee').textContent=won(sum('fee'))||'0';
@@ -477,7 +479,7 @@ input.num{font-family:var(--num)}
     const head=['날짜','상차지','하차지','상차수량','하차수량','계근비'];
     const body=rows.map(r=>[r.d??'',r.from||'',r.to||'',f2(r.load),f2(r.unload),r.fee!=null?r.fee:(r.note||'')]);
     const sum=k=>rows.reduce((a,r)=>a+(Number(r[k])||0),0);
-    body.push([rows.filter(r=>r.d).length,'합계','',sum('load').toFixed(2),sum('unload').toFixed(2),sum('fee')]);
+    body.push([dayCount(rows),'합계','',sum('load').toFixed(2),sum('unload').toFixed(2),sum('fee')]);
     return [head,...body];
   }
   function copyText(txt){
