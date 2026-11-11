@@ -39,7 +39,7 @@ body{margin:0;-webkit-text-size-adjust:100%}
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;
   padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));
-  padding-block:12px 110px}
+  padding-block:12px calc(130px + env(safe-area-inset-bottom,0px))}
 .wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
 button{font:inherit;color:inherit;cursor:pointer}
 button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
@@ -150,6 +150,7 @@ input.num{font-family:var(--num)}
   <div id="statView" hidden></div>
 
   <div id="logView" class="wrap" style="max-width:none">
+  <p class="hint">줄을 누르면 고칠 수 있어요. 두 곳에 나눠 내렸으면 그 줄을 누르고 <b>“이 운행에 하차지 추가”</b>를 누르세요. 합계 왼쪽 숫자는 운행 횟수예요.</p>
   <div class="sheet">
     <table>
       <caption><button id="vehicleBtn">차량번호</button> <span id="capMonth">26년 10월</span> 운행일보</caption>
@@ -159,7 +160,6 @@ input.num{font-family:var(--num)}
     </table>
   </div>
 
-  <p class="hint">줄을 누르면 고칠 수 있어요. 한 번 상차해서 두 곳에 나눠 내린 경우, 그 줄을 누르고 “하차지 추가”를 누르세요. 맨 아래 합계의 왼쪽 숫자는 운행 횟수예요.</p>
   </div>
   <div class="tools"><button id="exportBtn">내보내기 · 운행일보 + 통계 PDF</button></div>
   <div class="tools">
