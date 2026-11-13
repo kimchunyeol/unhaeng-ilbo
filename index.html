@@ -559,6 +559,12 @@ input.num{font-family:var(--num)}
       addEventListener('resize',layout);requestAnimationFrame(layout);
     });
   }
+  // 바로 스캔: 모서리를 자동으로 찾아서 곧장 펴기 (조금 어긋나도 그대로)
+  async function autoScan(file){
+    let src;try{src=toCanvas(await loadImg(file),2600)}catch(e){return null}
+    await new Promise(r=>setTimeout(r,20));
+    try{return warpScan(src,detectQuad(src))}catch(e){src._photo=src;return src}
+  }
   function canvasBlob(c){return new Promise(ok=>c.toBlob(b=>ok(b),'image/jpeg',0.88))}
 
   let ocrWorker=null,ocrLoading=null;
@@ -620,10 +626,12 @@ input.num{font-family:var(--num)}
     document.querySelectorAll('[data-scan]').forEach(b=>b.onclick=()=>{target=b.dataset.scan;inp.value='';inp.click()});
     inp.onchange=async()=>{
       const f=inp.files&&inp.files[0];if(!f||!target)return;
-      const scanned=await openScanner(f);
-      if(!scanned)return;
       const out=$('scanOut'),msg=$('scanMsg'),chips=$('scanChips'),img=$('scanImg'),save=$('scanSave');
-      out.hidden=false;chips.innerHTML='';save.hidden=true;
+      out.hidden=false;chips.innerHTML='';save.hidden=true;img.removeAttribute('src');
+      msg.style.color='';msg.textContent='스캔하는 중…';
+      document.querySelectorAll('[data-scan]').forEach(b=>b.disabled=true);
+      const scanned=await autoScan(f);
+      if(!scanned){msg.style.color='var(--danger)';msg.textContent='사진을 열지 못했어요. 다시 찍어 주세요.';document.querySelectorAll('[data-scan]').forEach(b=>b.disabled=false);return}
       scanBlob=await canvasBlob(scanned);
       try{img.src=URL.createObjectURL(scanBlob)}catch(e){}
       const label=target==='fLoad'?'상차':'하차';
