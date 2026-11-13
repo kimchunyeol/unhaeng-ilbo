@@ -126,6 +126,12 @@ input.num{font-family:var(--num)}
 #scanImg{width:84px;height:112px;object-fit:contain;border-radius:8px;border:1px solid var(--line);flex:none;background:var(--bg)}
 .scaninfo{display:flex;flex-direction:column;gap:8px;min-width:0;flex:1}
 #scanMsg{margin:0;font-size:14px;line-height:1.5;font-weight:600}
+.accept{display:flex;align-items:center;gap:10px;border:1.5px solid var(--line);background:var(--paper);border-radius:12px;padding:13px 14px;font-weight:700;font-size:16px;text-align:left}
+.accept small{font-weight:500;color:var(--muted);font-size:13px;margin-left:auto}
+.accept .box{width:22px;height:22px;border-radius:6px;border:2px solid var(--line);flex:none;display:grid;place-items:center}
+.accept[aria-pressed="true"]{border-color:var(--accent);background:var(--chip)}
+.accept[aria-pressed="true"] .box{background:var(--accent);border-color:var(--accent)}
+.accept[aria-pressed="true"] .box::after{content:"";width:6px;height:11px;border:solid var(--paper);border-width:0 2.5px 2.5px 0;transform:translateY(-1px) rotate(45deg)}
 .namenote{display:block;margin-top:4px;font-weight:500;color:var(--accent)}
 #scanMsg small{display:block;font-weight:500;color:var(--muted);font-family:var(--num);font-size:12px}
 .scansave{align-self:flex-start;border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:8px 14px;font-weight:700;font-size:13px}
@@ -705,7 +711,7 @@ input.num{font-family:var(--num)}
           const opts=[...new Set([p.match.net,...p.values])];
           chips.innerHTML=opts.map(v=>`<button type="button" data-pick="${v}">${v.toFixed(2)}</button>`).join('');
         }else if(p.match){
-          field.value=p.match.net.toFixed(2);
+          field.value=p.match.net.toFixed(2);field.dispatchEvent(new Event('input'));
           let dayNote='';
           if(target==='fLoad'&&$('fD')){
             const day=ticketDay(p.text||'',ym.y,ym.m);
@@ -723,7 +729,7 @@ input.num{font-family:var(--num)}
         if(nameNote){const sm=document.createElement('span');sm.className='namenote';sm.innerHTML=nameNote;msg.insertBefore(sm,msg.querySelector('small'))}
         if(p.deg){scanBlob=await canvasBlob(rotated(scanned,p.deg));try{img.src=URL.createObjectURL(scanBlob)}catch(e){}}
         save.hidden=false;
-        chips.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{field.value=(+b.dataset.pick).toFixed(2);toast(`${label}수량을 ${field.value}(으)로 바꿨어요`)});
+        chips.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{field.value=(+b.dataset.pick).toFixed(2);field.dispatchEvent(new Event('input'));toast(`${label}수량을 ${field.value}(으)로 바꿨어요`)});
       }catch(e){
         save.hidden=false;
         msg.style.color='var(--danger)';msg.textContent='읽기 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요. 스캔본은 사진첩에 저장할 수 있어요.';
@@ -763,6 +769,7 @@ input.num{font-family:var(--num)}
         <div class="chips full">${chips('to','fTo')}</div>
         ${isSplit?'':`<label>상차수량 (톤)<input id="fLoad" class="num" inputmode="decimal" value="${r.load??''}" placeholder="23.05"></label>`}
         <label>하차수량 (톤)<input id="fUnload" class="num" inputmode="decimal" value="${r.unload??''}" placeholder="${isSplit?'9.40':'비우면 상차수량'}"></label>
+        ${isSplit?'':`<button type="button" id="fAccept" class="accept full" aria-pressed="${r.note==='상차수량'}"><span class="box"></span>상차수량 인정 <small>하차수량 = 상차수량</small></button>`}
         <label>계근비 (원)<input id="fFee" class="num" inputmode="numeric" value="${r.fee??''}" placeholder="없으면 비움"></label>
         <label>메모<input id="fNote" value="${esc(r.note)}" placeholder="예: 상차수량"></label>
       </div>
@@ -795,6 +802,19 @@ input.num{font-family:var(--num)}
     $('cancel').onclick=close;
     m.querySelectorAll('[data-fill]').forEach(b=>b.onclick=()=>{$(b.dataset.fill).value=b.dataset.v});
     wireScan();
+    const acc=$('fAccept');
+    if(acc){
+      const on=()=>acc.getAttribute('aria-pressed')==='true';
+      const sync=()=>{if(on())$('fUnload').value=$('fLoad').value};
+      acc.onclick=()=>{
+        const nowOn=!on();acc.setAttribute('aria-pressed',nowOn);
+        const note=$('fNote');
+        if(nowOn){sync();if(!note.value.trim())note.value='상차수량';toast('하차수량을 상차수량과 같게 넣었어요')}
+        else if(note.value.trim()==='상차수량')note.value='';
+      };
+      $('fLoad').addEventListener('input',sync);
+      $('fUnload').addEventListener('input',()=>{if(on()&&$('fUnload').value!==$('fLoad').value){acc.setAttribute('aria-pressed','false');const n=$('fNote');if(n.value.trim()==='상차수량')n.value=''}});
+    }
     m.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>{
       const [f,t]=b.dataset.route.split('|');$('fFrom').value=f;$('fTo').value=t;
       const l=$('fLoad');if(l){l.focus()}
