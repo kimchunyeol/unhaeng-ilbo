@@ -567,6 +567,23 @@ input.num{font-family:var(--num)}
   }
   function canvasBlob(c){return new Promise(ok=>c.toBlob(b=>ok(b),'image/jpeg',0.88))}
 
+  // 계근표 글자에서 날짜(일)를 찾음: "2026년 11월 13일" 처럼 연도·월 뒤의 숫자. 확실할 때만 돌려줌
+  function ticketDay(text,y,mo){
+    const t=String(text).replace(/[Oo]/g,'0');const days=new Date(y,mo,0).getDate();
+    let at=t.indexOf(String(y));
+    while(at!==-1){
+      const groups=(t.slice(at+4,at+30).match(/\d+/g)||[]).slice(0,4);
+      const mi=groups.findIndex(g=>g.length<=3&&g.includes(String(mo)));
+      if(mi!==-1&&groups[mi+1]){
+        const g=groups[mi+1];
+        const cands=new Set([g,g.slice(0,-1),g.slice(1)].filter(c=>c.length>=1&&c.length<=2&&+c>=1&&+c<=days).map(Number));
+        if(g.length<=2&&+g>=1&&+g<=days)return +g;
+        if(cands.size===1)return [...cands][0];
+      }
+      at=t.indexOf(String(y),at+4);
+    }
+    return null;
+  }
   let ocrWorker=null,ocrLoading=null;
   function loadScript(src){return new Promise((ok,no)=>{const e=document.createElement('script');e.src=src;e.onload=ok;e.onerror=no;document.head.appendChild(e)})}
   async function getOcr(){
@@ -611,7 +628,7 @@ input.num{font-family:var(--num)}
         onStep&&onStep(deg);
         const {data}=await w.recognize(rotated(base,deg));
         const p=weighParse(data.text,getTare());
-        if(p.match&&(!best||p.match.score>best.match.score))best={...p,deg,src};
+        if(p.match&&(!best||p.match.score>best.match.score))best={...p,deg,src,text:data.text};
         if(best&&best.match.score>=38)return best; // 세 숫자 모두 확실 + 가장 큰 숫자가 총중량 + 공차가 맞음
         if(p.values.length>lastVals.length)lastVals=p.values;
       }
@@ -647,8 +664,13 @@ input.num{font-family:var(--num)}
           chips.innerHTML=opts.map(v=>`<button type="button" data-pick="${v}">${v.toFixed(2)}</button>`).join('');
         }else if(p.match){
           field.value=p.match.net.toFixed(2);
+          let dayNote='';
+          if(target==='fLoad'&&$('fD')){
+            const day=ticketDay(p.text||'',ym.y,ym.m);
+            if(day){$('fD').value=day;dayNote=` 날짜는 계근표에 적힌 <b>${day}일</b>로 넣었어요.`}
+          }
           setTare(p.match.tare);
-          msg.innerHTML=`${label}수량에 <b>${p.match.net.toFixed(2)}</b>을 넣었어요. 맞는지 확인해 주세요.<small>총 ${p.match.gross.toFixed(2)} − 공차 ${p.match.tare.toFixed(2)} = 실 ${p.match.net.toFixed(2)}</small>`;
+          msg.innerHTML=`${label}수량에 <b>${p.match.net.toFixed(2)}</b>을 넣었어요.${dayNote} 맞는지 확인해 주세요.<small>총 ${p.match.gross.toFixed(2)} − 공차 ${p.match.tare.toFixed(2)} = 실 ${p.match.net.toFixed(2)}</small>`;
           const others=[p.match.tare].concat(p.values.filter(v=>v!==p.match.net&&v!==p.match.gross&&v!==p.match.tare));
           chips.innerHTML=others.length?'<span class="hint" style="width:100%">다른 숫자가 맞으면 누르세요</span>'+others.map(v=>`<button type="button" data-pick="${v}">${v.toFixed(2)}</button>`).join(''):'';
         }else{
