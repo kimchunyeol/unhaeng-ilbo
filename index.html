@@ -118,6 +118,16 @@ input.num{font-family:var(--num)}
 .bar .fill{height:100%;background:var(--band);border-radius:6px}
 .bar .val{font-family:var(--num);font-size:13px;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
 .bar .val em{font-style:normal;color:var(--muted);font-weight:500}
+.scan{display:flex;flex-direction:column;gap:10px;border:1px dashed var(--line);border-radius:12px;padding:12px}
+.scanbtns{display:flex;gap:8px;flex-wrap:wrap}
+.scanbtn{flex:1 1 140px;border:1px solid var(--band);background:var(--chip);color:var(--ink);border-radius:12px;padding:13px 10px;font-weight:700;font-size:15px}
+#scanOut{display:flex;gap:12px;align-items:flex-start}
+#scanOut[hidden]{display:none}
+#scanImg{width:84px;height:112px;object-fit:cover;border-radius:8px;border:1px solid var(--line);flex:none;background:var(--bg)}
+.scaninfo{display:flex;flex-direction:column;gap:8px;min-width:0;flex:1}
+#scanMsg{margin:0;font-size:14px;line-height:1.5;font-weight:600}
+#scanMsg small{display:block;font-weight:500;color:var(--muted);font-family:var(--num);font-size:12px}
+.scansave{align-self:flex-start;border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:8px 14px;font-weight:700;font-size:13px}
 @media (prefers-reduced-motion:no-preference){.panel{animation:up .18s ease-out}@keyframes up{from{transform:translateY(30px);opacity:.6}}}
 </style>
 </head>
@@ -388,6 +398,122 @@ input.num{font-family:var(--num)}
 
   /* ---------- 입력창 ---------- */
   // mode: 'new' | 'edit' | 'split'
+  /* ---------- 계근표 찍어서 수량 읽기 ---------- */
+  // 사진 속 숫자를 모아 (총중량 = 공차 + 실중량) 짝을 찾음. 단위는 톤.
+  function weighParse(text,tareHint){
+    const t=String(text).replace(/[Oo]/g,'0');
+    const sure=[],maybe=[];
+    const add=(arr,v)=>{if(v>=1&&v<=60)arr.push(Math.round(v*100)/100)};
+    const re=/\d[\d,.]*\d|\d/g;let m;
+    while((m=re.exec(t))){
+      const tok=m[0],b=t[m.index-1]||'',a=t.slice(re.lastIndex,re.lastIndex+4);
+      if(b===':'||a[0]===':'||b==='-'||a[0]==='-'||b==='('||a[0]===')')continue;
+      const kg=/^\s*kg/i.test(a);let x;
+      if((x=tok.match(/^(\d{1,2})[,.](\d{3})$/)))add(sure,(+x[1]*1000+ +x[2])/1000);
+      else if(/^\d{1,2}\.\d{1,2}$/.test(tok))add(sure,+tok);
+      else if(/^\d{4,5}$/.test(tok)){if(kg)add(sure,+tok/1000);else if(tok.length===5)add(maybe,+tok/1000);else add(maybe,+tok/100)}
+    }
+    const all=[...new Set([...sure,...maybe])].sort((p,q)=>q-p);
+    const isSure=v=>sure.includes(v);
+    const pick=(b,c)=>Math.abs(b-tareHint)<=Math.abs(c-tareHint)?{tare:b,net:c}:{tare:c,net:b};
+    let best=null,score=-1;
+    for(const a of all)for(const b of all)for(const c of all){
+      if(!(a>b&&a>c&&b>=c)||Math.abs(a-(b+c))>0.021)continue;
+      const sc=[a,b,c].filter(isSure).length;
+      if(sc>score){score=sc;best={gross:a,...pick(b,c)}}
+    }
+    const s=[...new Set(sure)].sort((p,q)=>q-p);
+    if(!best&&s.length>=2){const g=s[0];const tr=s.slice(1).find(v=>Math.abs(v-tareHint)<=1.5);
+      if(tr!=null&&g-tr>1)best={gross:g,tare:tr,net:Math.round((g-tr)*100)/100}}
+    return {values:s,match:best};
+  }
+  let ocrWorker=null,ocrLoading=null;
+  function loadScript(src){return new Promise((ok,no)=>{const e=document.createElement('script');e.src=src;e.onload=ok;e.onerror=no;document.head.appendChild(e)})}
+  async function getOcr(){
+    if(ocrWorker)return ocrWorker;
+    if(!ocrLoading)ocrLoading=(async()=>{
+      if(!window.Tesseract)await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js');
+      const w=await Tesseract.createWorker('eng');
+      await w.setParameters({tessedit_pageseg_mode:'11'});
+      ocrWorker=w;return w;
+    })().catch(e=>{ocrLoading=null;throw e});
+    return ocrLoading;
+  }
+  function fileToCanvas(file){
+    return new Promise((ok,no)=>{
+      const img=new Image();const url=URL.createObjectURL(file);
+      img.onload=()=>{const k=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight));
+        const c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);
+        const g=c.getContext('2d');g.filter='grayscale(1) contrast(1.3)';g.drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);ok(c)};
+      img.onerror=()=>{URL.revokeObjectURL(url);no(new Error('img'))};img.src=url;
+    });
+  }
+  function rotated(c,deg){
+    if(!deg)return c;
+    const r=document.createElement('canvas');const side=deg===180;
+    r.width=side?c.width:c.height;r.height=side?c.height:c.width;
+    const g=r.getContext('2d');g.translate(r.width/2,r.height/2);g.rotate(deg*Math.PI/180);g.drawImage(c,-c.width/2,-c.height/2);return r;
+  }
+  function getTare(){try{return parseFloat(localStorage.getItem(LS+'tare'))||17.3}catch(e){return 17.3}}
+  function setTare(v){try{localStorage.setItem(LS+'tare',String(v))}catch(e){}}
+  async function readTicket(file,onStep){
+    const w=await getOcr();
+    const base=await fileToCanvas(file);
+    let lastVals=[];
+    for(const deg of [0,270,90,180]){
+      onStep&&onStep(deg);
+      const {data}=await w.recognize(rotated(base,deg));
+      const p=weighParse(data.text,getTare());
+      if(p.match)return p;
+      if(p.values.length>lastVals.length)lastVals=p.values;
+    }
+    return {values:lastVals,match:null};
+  }
+  let scanFileObj=null;
+  function wireScan(){
+    const inp=$('scanFile');if(!inp)return;
+    let target=null;
+    document.querySelectorAll('[data-scan]').forEach(b=>b.onclick=()=>{target=b.dataset.scan;inp.value='';inp.click()});
+    inp.onchange=async()=>{
+      const f=inp.files&&inp.files[0];if(!f||!target)return;
+      scanFileObj=f;
+      const out=$('scanOut'),msg=$('scanMsg'),chips=$('scanChips'),img=$('scanImg'),save=$('scanSave');
+      out.hidden=false;chips.innerHTML='';save.hidden=false;
+      try{img.src=URL.createObjectURL(f)}catch(e){}
+      const label=target==='fLoad'?'상차':'하차';
+      msg.style.color='';msg.innerHTML=`${label} 계근표 읽는 중…<small>처음 한 번은 읽기 도구를 받느라 10초쯤 걸려요</small>`;
+      document.querySelectorAll('[data-scan]').forEach(b=>b.disabled=true);
+      try{
+        const p=await readTicket(f,deg=>{if(deg)msg.innerHTML=`${label} 계근표 읽는 중…<small>사진 방향을 돌려서 다시 보는 중</small>`});
+        const field=$(target);
+        if(p.match){
+          field.value=p.match.net.toFixed(2);
+          setTare(p.match.tare);
+          msg.innerHTML=`${label}수량에 <b>${p.match.net.toFixed(2)}</b>을 넣었어요. 맞는지 확인해 주세요.<small>총 ${p.match.gross.toFixed(2)} − 공차 ${p.match.tare.toFixed(2)} = 실 ${p.match.net.toFixed(2)}</small>`;
+          const others=[p.match.tare].concat(p.values.filter(v=>v!==p.match.net&&v!==p.match.gross&&v!==p.match.tare));
+          chips.innerHTML=others.length?'<span class="hint" style="width:100%">다른 숫자가 맞으면 누르세요</span>'+others.map(v=>`<button type="button" data-pick="${v}">${v.toFixed(2)}</button>`).join(''):'';
+        }else{
+          msg.style.color='var(--danger)';
+          msg.innerHTML=`숫자를 확실히 읽지 못했어요. ${label}수량을 직접 넣어 주세요.<small>계근표가 화면에 꽉 차고 밝게 나오게 다시 찍으면 더 잘 읽어요</small>`;
+          chips.innerHTML=p.values.length?'<span class="hint" style="width:100%">읽은 숫자 중에 있으면 누르세요</span>'+p.values.map(v=>`<button type="button" data-pick="${v}">${v.toFixed(2)}</button>`).join(''):'';
+        }
+        chips.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{field.value=(+b.dataset.pick).toFixed(2);toast(`${label}수량을 ${field.value}(으)로 바꿨어요`)});
+      }catch(e){
+        msg.style.color='var(--danger)';msg.textContent='읽기 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.';
+      }
+      document.querySelectorAll('[data-scan]').forEach(b=>b.disabled=false);
+    };
+    $('scanSave').onclick=async()=>{
+      const f=scanFileObj;if(!f)return;
+      const name=`계근표_${ym.y}${String(ym.m).padStart(2,'0')}${String(($('fD')&&$('fD').value)||'').padStart(2,'0')}.jpg`;
+      const file=new File([f],name,{type:f.type||'image/jpeg'});
+      try{
+        if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return}
+      }catch(e){if(e&&e.name==='AbortError')return}
+      const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
+    };
+  }
+
   function openForm(mode,idx){
     const editing=mode==='edit'?rows[idx]:null;
     const isSplit=mode==='split'||(editing&&!editing.d);
@@ -413,6 +539,21 @@ input.num{font-family:var(--num)}
         <label>계근비 (원)<input id="fFee" class="num" inputmode="numeric" value="${r.fee??''}" placeholder="없으면 비움"></label>
         <label>메모<input id="fNote" value="${esc(r.note)}" placeholder="예: 상차수량"></label>
       </div>
+      <div class="scan">
+        <div class="scanbtns">
+          ${isSplit?'':'<button type="button" class="scanbtn" data-scan="fLoad">📷 상차 계근표</button>'}
+          <button type="button" class="scanbtn" data-scan="fUnload">📷 하차 계근표</button>
+        </div>
+        <input id="scanFile" type="file" accept="image/*" hidden>
+        <div id="scanOut" hidden>
+          <img id="scanImg" alt="찍은 계근표">
+          <div class="scaninfo">
+            <p id="scanMsg"></p>
+            <div class="chips" id="scanChips"></div>
+            <button type="button" id="scanSave" class="scansave" hidden>사진첩에 저장</button>
+          </div>
+        </div>
+      </div>
       <div class="row">
         <button type="button" id="cancel">닫기</button>
         <button type="submit" class="primary">저장</button>
@@ -426,6 +567,7 @@ input.num{font-family:var(--num)}
     m.querySelector('.scrim').addEventListener('click',e=>{if(e.target.classList.contains('scrim'))close()});
     $('cancel').onclick=close;
     m.querySelectorAll('[data-fill]').forEach(b=>b.onclick=()=>{$(b.dataset.fill).value=b.dataset.v});
+    wireScan();
     m.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>{
       const [f,t]=b.dataset.route.split('|');$('fFrom').value=f;$('fTo').value=t;
       const l=$('fLoad');if(l){l.focus()}
