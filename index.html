@@ -696,7 +696,7 @@ input.num{font-family:var(--num)}
       try{
         const p=await readTicket([scanned._photo,scanned._plain],deg=>{if(deg)msg.innerHTML=`${label} 계근표 읽는 중…<small>사진 방향을 돌려서 다시 보는 중</small>`});
         const field=$(target);
-        const role=target==='fLoad'?'from':'to',nameEl=$(target==='fLoad'?'fFrom':'fTo');
+        const role='from',nameEl=target==='fLoad'?$('fFrom'):null; // 하차지 이름은 직접 적음
         scanToks[target]=ticketTokens(p.text);
         let nameNote='';
         const known=lookupName(role,scanToks[target]);
@@ -851,7 +851,7 @@ input.num{font-family:var(--num)}
         let at=idx+1;while(at<rows.length&&!rows[at].d)at++;
         rows.splice(at,0,n);
       }else insertGroup([n]);
-      learnName('from',scanToks.fLoad,n.from);learnName('to',scanToks.fUnload,n.to);
+      learnName('from',scanToks.fLoad,n.from);
       saveMonth();render();close();toast('저장했어요');
     };
     setTimeout(()=>{const f=$(isSplit?'fTo':'fFrom');if(f&&!editing)f.focus()},50);
