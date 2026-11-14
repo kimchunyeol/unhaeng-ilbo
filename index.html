@@ -226,7 +226,7 @@ input.num{font-family:var(--num)}
   let ym={y:now.getFullYear(),m:now.getMonth()+1};
   let vehicle='';
   let rows=[];           // 현재 달 기록
-  let db=null, unsubMonth=null, writing=Promise.resolve();
+  let db=null, unsubMonth=null;
   const LS='unhaeng-ilbo:';
 
   const $=id=>document.getElementById(id);
@@ -245,14 +245,14 @@ input.num{font-family:var(--num)}
   function saveMonth(){
     const body={year:ym.y,month:ym.m,rows:rows};
     if(!db){lsSet('logs/'+key(),body);return}
-    const ref=db.doc('logs/'+key());
-    writing=writing.then(()=>ref.set(body)).catch(e=>{
-      toast(e&&e.code==='quota_exceeded'?'저장 공간이 가득 찼어요':'저장하지 못했어요. 다시 시도해 주세요');
+    // 신호가 없어도 기기에 먼저 기록되고, 연결되면 알아서 올라감 (앞 저장을 기다리지 않음)
+    db.doc('logs/'+key()).set(body).catch(e=>{
+      toast(e&&e.code==='permission-denied'?'보관함에 저장할 권한이 없어요. 다시 로그인해 주세요':'저장하지 못했어요. 다시 시도해 주세요');
     });
   }
   function saveVehicle(){
     if(!db){lsSet('settings',{vehicle});return}
-    writing=writing.then(()=>db.doc('settings/main').set({vehicle})).catch(()=>toast('차량번호를 저장하지 못했어요'));
+    db.doc('settings/main').set({vehicle},{merge:true}).catch(()=>toast('차량번호를 저장하지 못했어요'));
   }
 
   let prevRows=[], view='log';
@@ -423,7 +423,7 @@ input.num{font-family:var(--num)}
 
   /* 자주 쓰는 장소 (지금까지 기록에서 많이 나온 순) */
   function frequent(field){
-    const c={};rows.forEach(r=>{const v=(r[field]||'').trim();if(v)c[v]=(c[v]||0)+1});
+    const c={};[...prevRows,...rows].forEach(r=>{const v=(r[field]||'').trim();if(v)c[v]=(c[v]||0)+1});
     return Object.keys(c).sort((a,b)=>c[b]-c[a]).slice(0,8);
   }
 
@@ -538,45 +538,6 @@ input.num{font-family:var(--num)}
     for(let j=0;j<W*H;j++){const v=out[j];pi.data[j*4]=pi.data[j*4+1]=pi.data[j*4+2]=v;pi.data[j*4+3]=255}
     pc.putImageData(pi,0,0);res._plain=plain;res._photo=c;return res;
   }
-  // 스캔 화면: 모서리를 보여 주고 손으로 고칠 수 있게
-  function openScanner(file){
-    return new Promise(async(resolve)=>{
-      let src;try{src=toCanvas(await loadImg(file),2600)}catch(e){resolve(null);return}
-      let quad=detectQuad(src);
-      const ov=document.createElement('div');ov.className='scanner';
-      ov.innerHTML=`<div class="scbar"><b>계근표 스캔</b><span>모서리 점을 끌어서 종이 끝에 맞추세요</span></div>
-        <div class="scstage"><canvas class="scimg"></canvas><svg class="scline"><polygon></polygon></svg>${[0,1,2,3].map(i=>`<div class="scdot" data-i="${i}"></div>`).join('')}</div>
-        <div class="scfoot"><button type="button" data-a="cancel">취소</button><button type="button" data-a="rot">↻ 돌리기</button><button type="button" data-a="ok" class="primary">스캔하기</button></div>`;
-      document.body.appendChild(ov);
-      const stage=ov.querySelector('.scstage'),cv=ov.querySelector('.scimg'),poly=ov.querySelector('polygon'),dots=[...ov.querySelectorAll('.scdot')];
-      let scale=1,offX=0,offY=0;
-      function layout(){
-        const r=stage.getBoundingClientRect();scale=Math.min(r.width/src.width,r.height/src.height);
-        cv.width=Math.round(src.width*scale);cv.height=Math.round(src.height*scale);
-        offX=(r.width-cv.width)/2;offY=(r.height-cv.height)/2;
-        cv.style.left=offX+'px';cv.style.top=offY+'px';
-        cv.getContext('2d').drawImage(src,0,0,cv.width,cv.height);draw();
-      }
-      function draw(){
-        const pts=quad.map(([x,y])=>[offX+x*scale,offY+y*scale]);
-        poly.setAttribute('points',pts.map(p=>p.join(',')).join(' '));
-        dots.forEach((d,i)=>{d.style.left=pts[i][0]+'px';d.style.top=pts[i][1]+'px'});
-      }
-      dots.forEach((d,i)=>{
-        d.addEventListener('pointerdown',e=>{e.preventDefault();d.setPointerCapture(e.pointerId);d.classList.add('on')});
-        d.addEventListener('pointermove',e=>{if(!d.hasPointerCapture(e.pointerId))return;const r=stage.getBoundingClientRect();
-          quad[i]=[Math.max(0,Math.min(src.width,(e.clientX-r.left-offX)/scale)),Math.max(0,Math.min(src.height,(e.clientY-r.top-offY)/scale))];draw()});
-        const up=e=>{d.classList.remove('on')};d.addEventListener('pointerup',up);d.addEventListener('pointercancel',up);
-      });
-      const done=v=>{removeEventListener('resize',layout);ov.remove();resolve(v)};
-      ov.querySelector('[data-a=cancel]').onclick=()=>done(null);
-      ov.querySelector('[data-a=rot]').onclick=()=>{const w=src.width,h=src.height;src=rotated(src,90);quad=quad.map(([x,y])=>[h-y,x]);quad=[quad[3],quad[0],quad[1],quad[2]];layout()};
-      ov.querySelector('[data-a=ok]').onclick=async e=>{e.target.disabled=true;e.target.textContent='펴는 중…';
-        await new Promise(r=>setTimeout(r,30));
-        try{done(warpScan(src,quad))}catch(err){src._photo=src;done(src)}};
-      addEventListener('resize',layout);requestAnimationFrame(layout);
-    });
-  }
   // 바로 스캔: 모서리를 자동으로 찾아서 곧장 펴기 (조금 어긋나도 그대로)
   async function autoScan(file){
     let src;try{src=toCanvas(await loadImg(file),2600)}catch(e){return null}
@@ -596,7 +557,7 @@ input.num{font-family:var(--num)}
       const video=ov.querySelector('video'),stage=ov.querySelector('.scstage'),poly=ov.querySelector('polygon'),hint=ov.querySelector('#camHint'),shot=ov.querySelector('[data-a=shot]');
       let stream=null,timer=null,quad=null,closed=false;
       const small=document.createElement('canvas');
-      const stop=()=>{closed=true;clearInterval(timer);if(stream)stream.getTracks().forEach(t=>t.stop());ov.remove()};
+      const stop=()=>{closed=true;clearInterval(timer);removeEventListener('resize',drawQuad);if(stream)stream.getTracks().forEach(t=>t.stop());ov.remove()};
       const done=v=>{stop();resolve(v)};
       ov.querySelector('[data-a=cancel]').onclick=()=>done(null);
       ov.querySelector('[data-a=pick]').onclick=()=>{done(null);onPick()};
@@ -668,15 +629,6 @@ input.num{font-family:var(--num)}
       ocrWorker=w;return w;
     })().catch(e=>{ocrLoading=null;throw e});
     return ocrLoading;
-  }
-  function fileToCanvas(file){
-    return new Promise((ok,no)=>{
-      const img=new Image();const url=URL.createObjectURL(file);
-      img.onload=()=>{const k=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight));
-        const c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);
-        const g=c.getContext('2d');g.filter='grayscale(1) contrast(1.3)';g.drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);ok(c)};
-      img.onerror=()=>{URL.revokeObjectURL(url);no(new Error('img'))};img.src=url;
-    });
   }
   function rotated(c,deg){
     if(!deg)return c;
@@ -750,10 +702,12 @@ input.num{font-family:var(--num)}
       target=b.dataset.scan;
       openCamera(pickPhoto).then(c=>{if(c)run(()=>Promise.resolve(c))});
     });
+    const saveBtn=$('scanSave');
+    const saveLabel=()=>{saveBtn.classList.remove('done');saveBtn.innerHTML='📥 스캔본 사진첩에 저장<small>누른 뒤 아래 공유창에서 “이미지 저장”을 누르세요</small>'};
     const run=async getScanned=>{
       if(!target)return;
       const out=$('scanOut'),msg=$('scanMsg'),chips=$('scanChips'),img=$('scanImg'),save=$('scanSave');
-      out.hidden=false;chips.innerHTML='';save.hidden=true;img.removeAttribute('src');
+      out.hidden=false;chips.innerHTML='';save.hidden=true;saveLabel();img.removeAttribute('src');
       msg.style.color='';msg.textContent='스캔하는 중…';
       document.querySelectorAll('[data-scan]').forEach(b=>b.disabled=true);
       const scanned=await getScanned();
@@ -807,10 +761,6 @@ input.num{font-family:var(--num)}
       document.querySelectorAll('[data-scan]').forEach(b=>b.disabled=false);
     };
     inp.onchange=()=>{const f=inp.files&&inp.files[0];if(f)run(()=>autoScan(f))};
-    const saveBtn=$('scanSave');
-    const saveLabel=()=>{saveBtn.classList.remove('done');saveBtn.innerHTML='📥 스캔본 사진첩에 저장<small>누른 뒤 아래 공유창에서 “이미지 저장”을 누르세요</small>'};
-    saveLabel();
-    new MutationObserver(()=>{if(!saveBtn.hidden&&saveBtn.dataset.blob!==String(scanBlob&&scanBlob.size)){saveBtn.dataset.blob=String(scanBlob&&scanBlob.size);saveLabel()}}).observe(saveBtn,{attributes:true,attributeFilter:['hidden']});
     $('scanSave').onclick=async()=>{
       const f=scanBlob;if(!f)return;
       const name=`계근표_${ym.y}${String(ym.m).padStart(2,'0')}${String(($('fD')&&$('fD').value)||'').padStart(2,'0')}.jpg`;
@@ -876,7 +826,6 @@ input.num{font-family:var(--num)}
     </form></div>`;
     m.hidden=false;
     const close=()=>{m.hidden=true;m.innerHTML=''};
-    m.querySelector('.scrim').addEventListener('click',e=>{if(e.target.classList.contains('scrim'))close()});
     $('cancel').onclick=close;
     m.querySelectorAll('[data-fill]').forEach(b=>b.onclick=()=>{$(b.dataset.fill).value=b.dataset.v});
     wireScan();
@@ -900,8 +849,13 @@ input.num{font-family:var(--num)}
     if(editing){
       const del=$('del');
       del.onclick=()=>{
-        if(!del.classList.contains('armed')){del.classList.add('armed');del.textContent='한 번 더 누르면 삭제';return}
-        rows.splice(idx,1);saveMonth();render();close();toast('삭제했어요');
+        if(!del.classList.contains('armed')){
+          const subs=(()=>{let e=idx+1;if(rows[idx].d)while(e<rows.length&&!rows[e].d)e++;return e-idx-1})();
+          del.classList.add('armed');del.textContent=subs?`한 번 더 누르면 삭제 (하차지 ${subs}곳 포함)`:'한 번 더 누르면 삭제';return}
+        let end=idx+1;
+        if(rows[idx].d)while(end<rows.length&&!rows[end].d)end++; // 딸린 하차지 줄
+        const extra=end-idx-1;
+        rows.splice(idx,end-idx);saveMonth();render();close();toast(extra?`삭제했어요. 딸린 하차지 ${extra}곳도 같이 지웠어요`:'삭제했어요');
       };
       const sp=$('addSplit');
       if(sp)sp.onclick=()=>{close();openForm('split',idx)};
@@ -945,7 +899,7 @@ input.num{font-family:var(--num)}
   /* ---------- 내보내기 ---------- */
   function tableData(){
     const head=['날짜','상차지','하차지','상차수량','하차수량','계근비'];
-    const body=rows.map(r=>[r.d??'',r.from||'',r.to||'',f2(r.load),f2(r.unload),r.fee!=null?r.fee:(r.note||'')]);
+    const body=rows.map(r=>[r.d??'',r.from||'',r.to||'',f2(r.load),f2(r.unload),r.fee!=null?won(r.fee):(r.note||'')]);
     const sum=k=>rows.reduce((a,r)=>a+(Number(r[k])||0),0);
     body.push([dayCount(rows),'합계','',sum('load').toFixed(2),sum('unload').toFixed(2),sum('fee')]);
     return [head,...body];
@@ -955,12 +909,27 @@ input.num{font-family:var(--num)}
       let ok=false;try{ok=document.execCommand('copy')}catch(e){}ta.remove();toast(ok?'복사했어요. 시트에 붙여넣으세요':'복사가 막혀 있어요. 엑셀 파일로 저장을 써 주세요')};
     try{navigator.clipboard.writeText(txt).then(()=>toast('복사했어요. 시트에 붙여넣으세요'),fallback)}catch(e){fallback()}
   }
+  function readyPrompt(file){ // 파일은 준비됐는데 아이폰이 공유창을 막았을 때: 한 번 더 눌러서 열기
+    return new Promise((ok,no)=>{
+      const m=$('modal');
+      m.innerHTML=`<div class="scrim"><div class="panel"><h2>파일이 준비됐어요</h2>
+        <p class="split">${esc(file.name)}</p>
+        <div class="row"><button type="button" id="rpClose">닫기</button><button type="button" class="primary" id="rpGo">저장·공유하기</button></div></div></div>`;
+      m.hidden=false;
+      const close=()=>{m.hidden=true;m.innerHTML=''};
+      $('rpClose').onclick=()=>{close();no({code:'declined'})};
+      $('rpGo').onclick=()=>{navigator.share({files:[file],title:file.name}).then(()=>{close();ok({status:'saved'})},e=>{close();no(e&&e.name==='AbortError'?{code:'declined'}:e)})};
+    });
+  }
   const downloads={save({filename,data}){
     const type=filename.endsWith('.pdf')?'application/pdf':filename.endsWith('.json')?'application/json':'text/csv';
     const blob=new Blob([data],{type});
     const file=new File([blob],filename,{type});
     if(navigator.canShare&&navigator.canShare({files:[file]})&&/iPhone|iPad|Android/i.test(navigator.userAgent)){
-      return navigator.share({files:[file],title:filename}).then(()=>({status:'saved'}),e=>{if(e&&e.name==='AbortError')throw {code:'declined'};throw e});
+      return navigator.share({files:[file],title:filename}).then(()=>({status:'saved'}),e=>{
+        if(e&&e.name==='AbortError')throw {code:'declined'};
+        if(e&&e.name==='NotAllowedError')return readyPrompt(file);
+        throw e});
     }
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;
     document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
@@ -1067,6 +1036,8 @@ input.num{font-family:var(--num)}
     qs.forEach(d=>{all['logs/'+d.id]=d.data()});
     const st=await fs.doc(`users/${user.uid}/settings/main`).get();
     if(st.exists)all.settings={vehicle:st.data().vehicle||''};
+    const tk=await fs.doc(`users/${user.uid}/settings/tickets`).get();
+    if(tk.exists)all.tickets=tk.data();
     return all;
   }
   async function writeCloud(entries,onlyMissing){
@@ -1096,6 +1067,7 @@ input.num{font-family:var(--num)}
         const j=JSON.parse(r.result);
         if(!j||j.app!=='unhaeng-ilbo'||!j.data)throw 0;
         if(j.data.settings&&j.data.settings.vehicle){vehicle=j.data.settings.vehicle;saveVehicle()}
+        if(j.data.tickets&&typeof j.data.tickets==='object'){ticketMap=j.data.tickets;if(db)db.doc('settings/tickets').set(ticketMap).catch(()=>{});else lsSet('tickets',ticketMap)}
         if(user){await writeCloud(Object.entries(j.data),false)}
         else Object.entries(j.data).forEach(([k,v])=>lsSet(k,v));
         openMonth();toast('백업을 불러왔어요');
@@ -1133,6 +1105,7 @@ input.num{font-family:var(--num)}
     try{
       const n=await writeCloud(localMonths(),true);
       const st=lsGet('settings');if(st&&st.vehicle&&!vehicle){vehicle=st.vehicle;saveVehicle()}
+      lsSet('moved:'+user.uid,true);
       $('moveBox').hidden=true;toast(n?`${n}달 치 기록을 보관함에 올렸어요`:'보관함에 이미 다 있어요');openMonth();
     }catch(e){showMove(e)}
     b.disabled=false;b.textContent='이 휴대폰 기록 보관함에 올리기';
@@ -1156,18 +1129,22 @@ input.num{font-family:var(--num)}
     $('store').textContent='자동 저장 · 휴대폰·맥미니 같이';
     const b=$('authBtn');b.hidden=false;b.className='authbtn out';b.textContent='로그아웃';
     // 처음 로그인하면 이 기기에 있던 기록을 보관함으로 옮김 (보관함에 이미 있는 달은 건드리지 않음)
-    try{
-      const stRef=fs.doc(base+'settings/main');
-      const st=await stRef.get();
-      const cloudVeh=st.exists?st.data().vehicle:'';
-      const local=localAll();
-      const n=await writeCloud(Object.entries(local),true);
-      const localVeh=local.settings&&local.settings.vehicle;
-      vehicle=cloudVeh||localVeh||vehicle;
-      if(vehicle&&vehicle!==cloudVeh)await stRef.set({vehicle},{merge:true});
-      if(n)toast(`이 기기 기록 ${n}달 치를 보관함에 올렸어요`);
-      $('moveBox').hidden=true;
-    }catch(e){showMove(e)}
+    const movedKey='moved:'+u.uid;
+    if(!lsGet(movedKey)){
+      try{
+        const stRef=fs.doc(base+'settings/main');
+        const st=await stRef.get();
+        const cloudVeh=st.exists?st.data().vehicle:'';
+        const local=localAll();
+        const n=await writeCloud(Object.entries(local),true);
+        const localVeh=local.settings&&local.settings.vehicle;
+        vehicle=cloudVeh||localVeh||vehicle;
+        if(vehicle&&vehicle!==cloudVeh)await stRef.set({vehicle},{merge:true});
+        if(n)toast(`이 기기 기록 ${n}달 치를 보관함에 올렸어요`);
+        lsSet(movedKey,true);
+        $('moveBox').hidden=true;
+      }catch(e){showMove(e)}
+    }else $('moveBox').hidden=true;
     if(unsubTickets)unsubTickets();
     unsubTickets=fs.doc(base+'settings/tickets').onSnapshot(s=>{
       if(s.exists)ticketMap=s.data();
@@ -1237,6 +1214,9 @@ input.num{font-family:var(--num)}
     }
     openLogin();
   };
+
+  /* ---------- 신호 없을 때도 열리게: 앱과 도구를 기기에 보관 ---------- */
+  if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 
   /* ---------- 시작 ---------- */
   $('store').textContent='불러오는 중…';
