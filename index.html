@@ -146,6 +146,15 @@ input.num{font-family:var(--num)}
 .scdot{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;border:3px solid #fff;background:rgba(61,111,196,.55);box-shadow:0 0 0 2px rgba(0,0,0,.35);touch-action:none}
 .scdot.on{background:rgba(126,166,236,.9);transform:scale(1.15)}
 .scfoot{display:flex;gap:8px}
+.scstage video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.scline polygon.weak{stroke:#9aa6b8;stroke-dasharray:8 6;fill:none}
+.camflash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.camflash.on{animation:flash .35s ease-out}
+@keyframes flash{0%{opacity:.85}100%{opacity:0}}
+.camfoot{align-items:center}
+.camfoot .shutter{flex:none;width:76px;height:76px;border-radius:50%;padding:0;border:4px solid #fff;background:transparent;display:grid;place-items:center}
+.camfoot .shutter span{width:58px;height:58px;border-radius:50%;background:#fff}
+.camfoot .shutter:disabled{opacity:.4}
 .scfoot button{flex:1;border:1px solid #3a4456;background:#1a2230;color:#fff;border-radius:12px;padding:14px 8px;font-weight:700;font-size:16px}
 .scfoot .primary{background:#3d6fc4;border-color:#3d6fc4}
 @media (prefers-reduced-motion:no-preference){.panel{animation:up .18s ease-out}@keyframes up{from{transform:translateY(30px);opacity:.6}}}
@@ -485,11 +494,11 @@ input.num{font-family:var(--num)}
       if(n>bestN){bestN=n;bestId=id}id++;
     }
     const kx=c.width/W,ky=c.height/H;
-    if(bestN<W*H*0.15){const m=0.06;return[[c.width*m,c.height*m],[c.width*(1-m),c.height*m],[c.width*(1-m),c.height*(1-m)],[c.width*m,c.height*(1-m)]]}
+    if(bestN<W*H*0.15){const m=0.06;const d=[[c.width*m,c.height*m],[c.width*(1-m),c.height*m],[c.width*(1-m),c.height*(1-m)],[c.width*m,c.height*(1-m)]];d.found=false;return d}
     let tl=[0,0,1e9],tr=[0,0,-1e9],br=[0,0,-1e9],bl=[0,0,1e9];
     for(let p=0;p<W*H;p++){if(lab[p]!==bestId)continue;const x=p%W,y=(p/W)|0;
       if(x+y<tl[2])tl=[x,y,x+y];if(x+y>br[2])br=[x,y,x+y];if(x-y>tr[2])tr=[x,y,x-y];if(x-y<bl[2])bl=[x,y,x-y]}
-    return [tl,tr,br,bl].map(([x,y])=>[(x+0.5)*kx,(y+0.5)*ky]);
+    const q=[tl,tr,br,bl].map(([x,y])=>[(x+0.5)*kx,(y+0.5)*ky]);q.found=true;return q;
   }
   function homography(dst,src){ // dst 좌표 → src 좌표
     const A=[],b=[];
@@ -572,6 +581,61 @@ input.num{font-family:var(--num)}
     await new Promise(r=>setTimeout(r,20));
     try{return warpScan(src,detectQuad(src))}catch(e){src._photo=src;return src}
   }
+  /* ---------- 스캔 카메라: 종이 테두리를 실시간으로 보여 주고 셔터를 누르면 바로 스캔 ---------- */
+  function openCamera(onPick){
+    const can=navigator.mediaDevices&&navigator.mediaDevices.getUserMedia;
+    if(!can){onPick();return Promise.resolve(null)}
+    return new Promise(resolve=>{
+      const ov=document.createElement('div');ov.className='scanner';
+      ov.innerHTML=`<div class="scbar"><b>계근표 스캔</b><span id="camHint">계근표가 화면에 꽉 차게 비춰 주세요</span></div>
+        <div class="scstage"><video playsinline muted autoplay></video><svg class="scline"><polygon></polygon></svg><div class="camflash"></div></div>
+        <div class="scfoot camfoot"><button type="button" data-a="cancel">취소</button><button type="button" data-a="shot" class="shutter" aria-label="찍기"><span></span></button><button type="button" data-a="pick">사진첩</button></div>`;
+      document.body.appendChild(ov);
+      const video=ov.querySelector('video'),stage=ov.querySelector('.scstage'),poly=ov.querySelector('polygon'),hint=ov.querySelector('#camHint'),shot=ov.querySelector('[data-a=shot]');
+      let stream=null,timer=null,quad=null,closed=false;
+      const small=document.createElement('canvas');
+      const stop=()=>{closed=true;clearInterval(timer);if(stream)stream.getTracks().forEach(t=>t.stop());ov.remove()};
+      const done=v=>{stop();resolve(v)};
+      ov.querySelector('[data-a=cancel]').onclick=()=>done(null);
+      ov.querySelector('[data-a=pick]').onclick=()=>{done(null);onPick()};
+      const map=()=>{ // 영상 좌표 → 화면 좌표
+        const r=stage.getBoundingClientRect(),vw=video.videoWidth,vh=video.videoHeight;
+        const k=Math.min(r.width/vw,r.height/vh);return {k,ox:(r.width-vw*k)/2,oy:(r.height-vh*k)/2};
+      };
+      const drawQuad=()=>{
+        if(!quad||!video.videoWidth){poly.setAttribute('points','');return}
+        const {k,ox,oy}=map();
+        poly.setAttribute('points',quad.map(([x,y])=>`${ox+x*k},${oy+y*k}`).join(' '));
+        poly.classList.toggle('weak',!quad.found);
+      };
+      const tick=()=>{
+        if(closed||!video.videoWidth)return;
+        const k=Math.min(1,360/Math.max(video.videoWidth,video.videoHeight));
+        small.width=Math.round(video.videoWidth*k);small.height=Math.round(video.videoHeight*k);
+        small.getContext('2d').drawImage(video,0,0,small.width,small.height);
+        const q=detectQuad(small);const nq=q.map(([x,y])=>[x/k,y/k]);nq.found=q.found;
+        if(quad&&quad.found&&nq.found)quad=quad.map((p,i)=>[p[0]*0.5+nq[i][0]*0.5,p[1]*0.5+nq[i][1]*0.5]);else quad=nq;
+        quad.found=nq.found;
+        hint.textContent=quad.found?'파란 선이 종이 테두리에 맞으면 셔터를 누르세요':'계근표가 화면에 꽉 차게 비춰 주세요';
+        drawQuad();
+      };
+      shot.onclick=async()=>{
+        if(!video.videoWidth)return;
+        shot.disabled=true;ov.querySelector('.camflash').classList.add('on');
+        const c=document.createElement('canvas');c.width=video.videoWidth;c.height=video.videoHeight;
+        c.getContext('2d').drawImage(video,0,0);
+        hint.textContent='스캔하는 중…';
+        await new Promise(r=>setTimeout(r,30));
+        let out;try{out=warpScan(c,detectQuad(c))}catch(e){c._photo=c;out=c}
+        done(out);
+      };
+      navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:2560},height:{ideal:1440}}})
+        .then(s=>{if(closed){s.getTracks().forEach(t=>t.stop());return}stream=s;video.srcObject=s;video.play().catch(()=>{});timer=setInterval(tick,350)})
+        .catch(()=>{hint.textContent='카메라를 쓸 수 없어요. 설정에서 카메라를 허용하거나 “사진첩”을 눌러 주세요.';shot.disabled=true});
+      addEventListener('resize',drawQuad);
+    });
+  }
+
   function canvasBlob(c){return new Promise(ok=>c.toBlob(b=>ok(b),'image/jpeg',0.88))}
 
   // 계근표 글자에서 날짜(일)를 찾음: "2026년 11월 13일" 처럼 연도·월 뒤의 숫자. 확실할 때만 돌려줌
@@ -679,14 +743,18 @@ input.num{font-family:var(--num)}
     scanToks={};
     const inp=$('scanFile');if(!inp)return;
     let target=null;
-    document.querySelectorAll('[data-scan]').forEach(b=>b.onclick=()=>{target=b.dataset.scan;inp.value='';inp.click()});
-    inp.onchange=async()=>{
-      const f=inp.files&&inp.files[0];if(!f||!target)return;
+    const pickPhoto=()=>{inp.value='';inp.click()};
+    document.querySelectorAll('[data-scan]').forEach(b=>b.onclick=()=>{
+      target=b.dataset.scan;
+      openCamera(pickPhoto).then(c=>{if(c)run(()=>Promise.resolve(c))});
+    });
+    const run=async getScanned=>{
+      if(!target)return;
       const out=$('scanOut'),msg=$('scanMsg'),chips=$('scanChips'),img=$('scanImg'),save=$('scanSave');
       out.hidden=false;chips.innerHTML='';save.hidden=true;img.removeAttribute('src');
       msg.style.color='';msg.textContent='스캔하는 중…';
       document.querySelectorAll('[data-scan]').forEach(b=>b.disabled=true);
-      const scanned=await autoScan(f);
+      const scanned=await getScanned();
       if(!scanned){msg.style.color='var(--danger)';msg.textContent='사진을 열지 못했어요. 다시 찍어 주세요.';document.querySelectorAll('[data-scan]').forEach(b=>b.disabled=false);return}
       scanBlob=await canvasBlob(scanned);
       try{img.src=URL.createObjectURL(scanBlob)}catch(e){}
@@ -736,6 +804,7 @@ input.num{font-family:var(--num)}
       }
       document.querySelectorAll('[data-scan]').forEach(b=>b.disabled=false);
     };
+    inp.onchange=()=>{const f=inp.files&&inp.files[0];if(f)run(()=>autoScan(f))};
     $('scanSave').onclick=async()=>{
       const f=scanBlob;if(!f)return;
       const name=`계근표_${ym.y}${String(ym.m).padStart(2,'0')}${String(($('fD')&&$('fD').value)||'').padStart(2,'0')}.jpg`;
