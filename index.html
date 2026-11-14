@@ -67,6 +67,10 @@ tbody tr.warn td.d{box-shadow:inset 4px 0 0 #e0a800}
 .checkbox{background:var(--warn);color:var(--ink);border:1px solid #e0a800;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
 .checkbox h3{margin:0;font-size:15px;color:var(--warn-ink)}
 .checkbox{min-width:0}
+.bakbox{border:1.5px solid var(--accent)}
+.bakbox h3{color:var(--accent)}
+.tools .primary{background:var(--navy);color:var(--navy-ink);border-color:var(--navy)}
+.tools button:disabled{opacity:.6}
 #logView{min-width:0;width:100%}
 .checkbox button{all:unset;cursor:pointer;display:block;font-size:14px;line-height:1.5;padding:2px 0;min-width:0;overflow-wrap:anywhere}
 .checkbox button b{font-family:var(--num);margin-right:6px}
@@ -189,6 +193,12 @@ input.num{font-family:var(--num)}
   <div class="seg" role="group" aria-label="보기">
     <button id="tabLog" aria-pressed="true">운행일보</button>
     <button id="tabStat" aria-pressed="false">거래처 통계</button>
+  </div>
+
+  <div id="bakBox" class="box bakbox" hidden>
+    <h3 id="bakTitle">지난달 백업할 때예요</h3>
+    <p class="hint" id="bakMsg">지난달 운행일보 PDF와 전체 백업 파일을 구글 드라이브에 저장해 두세요. 누른 뒤 공유창에서 <b>파일에 저장 → Google Drive</b>를 고르면 돼요.</p>
+    <div class="tools"><button id="bakLater">나중에</button><button id="bakGo" class="primary">구글 드라이브에 저장</button></div>
   </div>
 
   <div id="moveBox" class="box" hidden>
@@ -1037,6 +1047,69 @@ input.num{font-family:var(--num)}
     g.fillStyle='#fff';g.font=`700 22px ${FONT}`;g.fillText('합계',M+cols[0]+(cols[1]+cols[2])/2,y+26);
     return cv;
   }
+  /* ---------- 매달 구글 드라이브 백업 ---------- */
+  // 매달 처음 열면 지난달 PDF + 전체 백업 파일을 미리 만들어 두고, 버튼 한 번에 공유창(파일에 저장 → Google Drive)으로 보냄
+  async function getMonthRows(k){
+    if(!db){const b=lsGet('logs/'+k);return (b&&b.rows)||[]}
+    try{const s=await db.doc('logs/'+k).get();const d=s.exists?s.data():null;return d&&Array.isArray(d.rows)?d.rows:[]}catch(e){return []}
+  }
+  async function makeMonthPdf(y,m){
+    const k=`${y}-${String(m).padStart(2,'0')}`;
+    let py=y,pm=m-1;if(pm<1){pm=12;py--}
+    const rowsM=await getMonthRows(k),rowsP=await getMonthRows(`${py}-${String(pm).padStart(2,'0')}`);
+    if(!rowsM.length||!window.jspdf)return null;
+    try{await document.fonts.load('700 20px "IBM Plex Sans KR"');await document.fonts.load('600 20px "IBM Plex Sans KR"')}catch(e){}
+    const keep={ym,rows,prevRows};
+    ym={y,m};rows=rowsM;prevRows=rowsP;
+    try{
+      const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+      const a=await drawSheet(),b=await drawStats();
+      pdf.addImage(a.toDataURL('image/png'),'PNG',0,0,210,297);pdf.addPage();pdf.addImage(b.toDataURL('image/png'),'PNG',0,0,210,297);
+      return new File([pdf.output('arraybuffer')],`${vehicle||'차량'}_${k}_운행일보.pdf`,{type:'application/pdf'});
+    }finally{ym=keep.ym;rows=keep.rows;prevRows=keep.prevRows}
+  }
+  async function getBackupDone(){
+    if(db){try{const s=await db.doc('settings/main').get();return s.exists?(s.data().lastBackup||''):''}catch(e){return null}}
+    return (lsGet('settings')||{}).lastBackup||'';
+  }
+  function setBackupDone(k){
+    if(db)db.doc('settings/main').set({lastBackup:k},{merge:true}).catch(()=>{});
+    else{const st=lsGet('settings')||{};st.lastBackup=k;lsSet('settings',st)}
+  }
+  let bakFiles=null,bakKey='',bakSnooze=false;
+  async function checkMonthlyBackup(){
+    if(bakSnooze)return;
+    const t=new Date();let y=t.getFullYear(),m=t.getMonth();if(m<1){m=12;y--}
+    const k=`${y}-${String(m).padStart(2,'0')}`;
+    const done=await getBackupDone();
+    if(done===null||done>=k){$('bakBox').hidden=true;return}
+    if(!(await getMonthRows(k)).length){$('bakBox').hidden=true;return}
+    bakKey=k;
+    $('bakTitle').textContent=`${m}월 운행일보 백업할 때예요`;
+    $('bakBox').hidden=false;
+    const go=$('bakGo');go.disabled=true;go.textContent='준비하는 중…';
+    try{
+      const pdf=await makeMonthPdf(y,m);
+      const all=user?await cloudAll():localAll();
+      const json=new File([JSON.stringify({app:'unhaeng-ilbo',v:1,data:all})],`운행일보_백업_${vehicle||'차량'}_${k}.json`,{type:'application/json'});
+      bakFiles=pdf?[pdf,json]:[json];
+      go.disabled=false;go.textContent='구글 드라이브에 저장';
+    }catch(e){go.disabled=false;go.textContent='다시 준비하기';bakFiles=null}
+  }
+  $('bakLater').onclick=()=>{bakSnooze=true;$('bakBox').hidden=true;toast('다음에 열 때 다시 알려 드릴게요')};
+  $('bakGo').onclick=()=>{
+    if(!bakFiles){checkMonthlyBackup();return}
+    const files=bakFiles;
+    const finish=()=>{setBackupDone(bakKey);$('bakBox').hidden=true;toast('백업을 보냈어요. 구글 드라이브에서 확인해 보세요')};
+    if(navigator.canShare&&navigator.canShare({files})){
+      navigator.share({files}).then(finish,e=>{if(e&&e.name==='AbortError')toast('저장하지 않았어요. “파일에 저장 → Google Drive”를 골라 주세요');else toast('공유창을 열지 못했어요. 다시 눌러 주세요')});
+      return;
+    }
+    // 컴퓨터: 두 파일을 내려받기 폴더로 (구글 드라이브 폴더로 옮기면 돼요)
+    files.forEach((f,i)=>setTimeout(()=>{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000)},i*400));
+    finish();
+  };
+
   async function savePdf(draws,filename){
     if(!downloads){toast('이 화면에서는 파일 저장이 안 돼요');return}
     if(!window.jspdf){toast('PDF 도구를 불러오지 못했어요. 다시 열어 주세요');return}
@@ -1185,6 +1258,7 @@ input.num{font-family:var(--num)}
     const st=lsGet('settings');if(st&&st.vehicle)vehicle=st.vehicle;
     openMonth();
     if(!vehicle)$('vehicleBtn').click();
+    setTimeout(()=>checkMonthlyBackup().catch(()=>{}),1500);
   }
   async function useCloud(u){
     user=u;
@@ -1218,6 +1292,7 @@ input.num{font-family:var(--num)}
     unsubVeh=fs.doc(base+'settings/main').onSnapshot(s=>{if(s.exists&&s.data().vehicle){vehicle=s.data().vehicle;render()}},()=>{});
     openMonth();
     if(!vehicle)$('vehicleBtn').click();
+    setTimeout(()=>checkMonthlyBackup().catch(()=>{}),1500);
   }
   const AUTH_MSG={
     'auth/invalid-email':'이메일 주소 모양이 맞지 않아요',
