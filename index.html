@@ -18,7 +18,7 @@
   --bg:#eef1f6; --paper:#ffffff; --ink:#18202e; --muted:#5f6b80;
   --navy:#1f3864; --navy-ink:#ffffff; --band:#3d6fc4; --band-ink:#ffffff;
   --tint:#dbe4ee; --line:#c4cdda; --datecol:#7d8696; --datecol-ink:#ffffff;
-  --total:#8d939d; --accent:#2457b3; --danger:#c0392b; --chip:#e4eaf3;
+  --total:#8d939d; --accent:#2457b3; --danger:#c0392b; --chip:#e4eaf3; --warn:#fff1c2; --warn-ink:#8a5a00;
   --font:"IBM Plex Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
   --num:"IBM Plex Mono",ui-monospace,Menlo,monospace;
 }
@@ -26,12 +26,12 @@
   --bg:#0f141c; --paper:#171e29; --ink:#e7ecf3; --muted:#9aa6b8;
   --navy:#1a2c4f; --navy-ink:#f0f4fa; --band:#2c4f8c; --band-ink:#f0f4fa;
   --tint:#1e2836; --line:#2d394b; --datecol:#3a4456; --datecol-ink:#e7ecf3;
-  --total:#3a4456; --accent:#7ea6ec; --danger:#ef7d6f; --chip:#243043; color-scheme:dark}}
+  --total:#3a4456; --accent:#7ea6ec; --danger:#ef7d6f; --chip:#243043; --warn:#3d3215; --warn-ink:#f2c95c; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f141c; --paper:#171e29; --ink:#e7ecf3; --muted:#9aa6b8;
   --navy:#1a2c4f; --navy-ink:#f0f4fa; --band:#2c4f8c; --band-ink:#f0f4fa;
   --tint:#1e2836; --line:#2d394b; --datecol:#3a4456; --datecol-ink:#e7ecf3;
-  --total:#3a4456; --accent:#7ea6ec; --danger:#ef7d6f; --chip:#243043; color-scheme:dark}
+  --total:#3a4456; --accent:#7ea6ec; --danger:#ef7d6f; --chip:#243043; --warn:#3d3215; --warn-ink:#f2c95c; color-scheme:dark}
 
 *{box-sizing:border-box}
 html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -54,14 +54,23 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline
 .authbtn.out{color:var(--muted);font-weight:500;padding:3px 10px;font-size:12px}
 
 .sheet{background:var(--paper);border:2px solid var(--navy);overflow-x:auto}
-table{border-collapse:collapse;width:100%;min-width:340px;font-size:14px}
+table{border-collapse:collapse;width:100%;min-width:340px;font-size:14px;table-layout:fixed}
 caption{background:var(--navy);color:var(--navy-ink);font-weight:700;font-size:17px;padding:10px 6px;caption-side:top}
 caption button{background:none;border:0;color:inherit;font-weight:700;padding:0 2px;text-decoration:underline dotted;text-underline-offset:4px}
-th{background:var(--band);color:var(--band-ink);font-weight:600;padding:8px 4px;border:1px solid var(--line);font-size:13px;letter-spacing:.02em}
-td{border:1px solid var(--line);padding:9px 3px;text-align:center;font-weight:600;white-space:nowrap}
+th{background:var(--band);color:var(--band-ink);font-weight:600;padding:8px 1px;border:1px solid var(--line);font-size:clamp(10.5px,3vw,13px);letter-spacing:0}
+td{border:1px solid var(--line);padding:9px 3px;overflow:hidden;text-align:center;font-weight:600;white-space:nowrap}
 tbody td,tfoot td{font-size:clamp(11px,3.4vw,14px)}
 th{white-space:nowrap}
 tbody tr:nth-child(even) td:not(.d){background:var(--tint)}
+tbody tr.warn td:not(.d){background:var(--warn)}
+tbody tr.warn td.d{box-shadow:inset 4px 0 0 #e0a800}
+.checkbox{background:var(--warn);color:var(--ink);border:1px solid #e0a800;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.checkbox h3{margin:0;font-size:15px;color:var(--warn-ink)}
+.checkbox{min-width:0}
+#logView{min-width:0;width:100%}
+.checkbox button{all:unset;cursor:pointer;display:block;font-size:14px;line-height:1.5;padding:2px 0;min-width:0;overflow-wrap:anywhere}
+.checkbox button b{font-family:var(--num);margin-right:6px}
+.checkbox button:focus-visible{outline:2px solid var(--accent)}
 tbody tr{cursor:pointer}
 tbody tr:active td{filter:brightness(.93)}
 td.d{background:var(--datecol);color:var(--datecol-ink);width:44px;line-height:1.1}
@@ -192,9 +201,11 @@ input.num{font-family:var(--num)}
 
   <div id="logView" class="wrap" style="max-width:none">
   <p class="hint">줄을 누르면 고칠 수 있어요. 두 곳에 나눠 내렸으면 그 줄을 누르고 <b>“이 운행에 하차지 추가”</b>를 누르세요. 합계 왼쪽 숫자는 일한 날수예요. 같은 날 여러 번 운행해도 하루로 세요.</p>
+  <div id="checkBox" class="checkbox" hidden></div>
   <div class="sheet">
     <table>
       <caption><button id="vehicleBtn">차량번호</button> <span id="capMonth">26년 10월</span> 운행일보</caption>
+      <colgroup><col style="width:11%"><col style="width:19%"><col style="width:22%"><col style="width:16%"><col style="width:16%"><col style="width:16%"></colgroup>
       <thead><tr><th>날짜</th><th>상차지</th><th>하차지</th><th>상차수량</th><th>하차수량</th><th>계근비</th></tr></thead>
       <tbody id="body"><tr><td class="empty" colspan="6">불러오는 중…</td></tr></tbody>
       <tfoot><tr><td id="tCount">0</td><td colspan="2">합계</td><td class="n" id="tLoad">0.00</td><td class="n" id="tUnload">0.00</td><td class="n" id="tFee">0</td></tr></tfoot>
@@ -280,6 +291,43 @@ input.num{font-family:var(--num)}
   }
 
   /* ---------- 화면 그리기 ---------- */
+  /* ---------- 보내기 전 점검: 계근 오차가 아닌 실수로 보이는 것만 ---------- */
+  const DIFF_LIMIT=1; // 상차와 하차 합계가 1톤 넘게 차이 나면 확인
+  function checkRows(list){
+    const issues=[];
+    for(let i=0;i<list.length;i++){
+      const r=list[i];
+      const costOnly=r.fee!=null&&r.load==null&&r.unload==null; // 수리지원처럼 비용만 적은 줄
+      if(costOnly)continue;
+      if(!r.d){ // 하차지 추가 줄
+        const why=[];if(!(r.to||'').trim())why.push('하차지가 비어 있어요');if(r.unload==null)why.push('하차수량이 비어 있어요');
+        if(why.length)issues.push({i,why:why.join(', ')});
+        continue;
+      }
+      let end=i+1;while(end<list.length&&!list[end].d)end++;
+      const grp=list.slice(i,end),why=[];
+      if(!(r.from||'').trim())why.push('상차지가 비어 있어요');
+      if(!(r.to||'').trim())why.push('하차지가 비어 있어요');
+      if(r.load==null)why.push('상차수량이 비어 있어요');
+      if(r.unload==null)why.push('하차수량이 비어 있어요');
+      if(r.load!=null&&grp.every(x=>x.unload!=null||x===r&&r.unload==null)&&r.unload!=null){
+        const un=grp.reduce((a,x)=>a+(Number(x.unload)||0),0),d=Math.abs(r.load-un);
+        if(d>DIFF_LIMIT)why.push(`상차 ${f2(r.load)} · 하차${grp.length>1?' 합계':''} ${un.toFixed(2)} (${d.toFixed(2)}톤 차이)`);
+      }
+      if(why.length)issues.push({i,why:why.join(', ')});
+    }
+    return issues;
+  }
+  function showChecks(issues){
+    const box=$('checkBox');
+    if(!issues.length){box.hidden=true;box.innerHTML='';return}
+    box.hidden=false;
+    box.innerHTML=`<h3>확인할 운행이 ${issues.length}개 있어요</h3>`+issues.map(x=>{const r=rows[x.i];
+      const day=r.d?`${r.d}일`:'하차지 추가';
+      return `<button type="button" data-open="${x.i}"><b>${day}</b>${esc(r.from||'')}${r.from?' → ':''}${esc(baseName(r.to)||'')} · ${esc(x.why)}</button>`}).join('');
+    box.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openForm('edit',+b.dataset.open));
+  }
+
   // 합계 왼쪽 숫자: 같은 날 여러 번 운행해도 하루로 셈 (일한 날수)
   const dayCount=list=>new Set(list.filter(r=>r.d).map(r=>r.d)).size;
   function render(){
@@ -290,15 +338,17 @@ input.num{font-family:var(--num)}
     if(!rows.length){
       tb.innerHTML='<tr><td class="empty" colspan="6">이번 달 기록이 아직 없어요.<br>아래 “+ 운행 추가”를 눌러 시작하세요.</td></tr>';
     }else{
+      const bad=new Set(checkRows(rows).map(x=>x.i));
       tb.innerHTML=rows.map((r,i)=>{
         let d='';
         if(r.d){const w=new Date(ym.y,ym.m-1,r.d).getDay();d=`${r.d}<small>${WD[w]}</small>`}
         const fee=r.fee!=null?won(r.fee):'';
         const feeCell=fee?`<td class="n">${fee}</td>`:`<td class="memo">${esc(r.note)}</td>`;
-        return `<tr data-i="${i}"><td class="d">${d}</td><td>${esc(r.from)}</td><td>${esc(r.to)}</td><td class="n">${f2(r.load)}</td><td class="n">${f2(r.unload)}</td>${feeCell}</tr>`;
+        return `<tr data-i="${i}"${bad.has(i)?' class="warn"':''}><td class="d">${d}</td><td>${esc(r.from)}</td><td>${esc(r.to)}</td><td class="n">${f2(r.load)}</td><td class="n">${f2(r.unload)}</td>${feeCell}</tr>`;
       }).join('');
     }
     const sum=k=>rows.reduce((a,r)=>a+(Number(r[k])||0),0);
+    showChecks(checkRows(rows));
     $('tCount').textContent=dayCount(rows);
     $('tLoad').textContent=sum('load').toFixed(2);
     $('tUnload').textContent=sum('unload').toFixed(2);
@@ -1003,7 +1053,21 @@ input.num{font-family:var(--num)}
       toast('저장했어요');
     }catch(e){if(!(e&&e.code==='declined'))toast('PDF를 저장하지 못했어요')}
   }
-  $('exportBtn').onclick=()=>savePdf([drawSheet,drawStats],`${vehicle}_${key()}_운행일보.pdf`);
+  $('exportBtn').onclick=()=>{
+    const go=()=>savePdf([drawSheet,drawStats],`${vehicle}_${key()}_운행일보.pdf`);
+    const issues=checkRows(rows);
+    if(!issues.length){go();return}
+    const m=$('modal');
+    m.innerHTML=`<div class="scrim"><div class="panel"><h2>확인할 운행이 ${issues.length}개 있어요</h2>
+      <div class="checkbox">${issues.map(x=>{const r=rows[x.i];return `<button type="button" data-open="${x.i}"><b>${r.d?r.d+'일':'하차지 추가'}</b>${esc(baseName(r.to)||'')} · ${esc(x.why)}</button>`}).join('')}</div>
+      <p class="hint">줄을 누르면 바로 고칠 수 있어요. 맞게 적은 거라면 그대로 PDF를 만들어도 돼요.</p>
+      <div class="row"><button type="button" id="ckBack">돌아가기</button><button type="button" class="primary" id="ckGo">그대로 PDF 만들기</button></div></div></div>`;
+    m.hidden=false;
+    const close=()=>{m.hidden=true;m.innerHTML=''};
+    $('ckBack').onclick=close;
+    $('ckGo').onclick=()=>{close();go()};
+    m.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{close();openForm('edit',+b.dataset.open)});
+  };
 
   /* ---------- 차량번호 ---------- */
   $('vehicleBtn').onclick=()=>{
