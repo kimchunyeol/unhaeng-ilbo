@@ -134,11 +134,12 @@ input.num{font-family:var(--num)}
 .scan{display:flex;flex-direction:column;gap:10px;border:1px dashed var(--line);border-radius:12px;padding:12px}
 .scanbtns{display:flex;gap:8px;flex-wrap:wrap}
 .scanbtn{flex:1 1 140px;border:1px solid var(--band);background:var(--chip);color:var(--ink);border-radius:12px;padding:13px 10px;font-weight:700;font-size:15px}
-#scanOut{display:flex;gap:12px;align-items:flex-start}
-#scanOut[hidden]{display:none}
-#scanImg{width:84px;height:112px;object-fit:contain;border-radius:8px;border:1px solid var(--line);flex:none;background:var(--bg)}
+#scanStart small{display:block;font-weight:500;font-size:12.5px;color:var(--muted);margin-top:2px}
+.scanres{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:10px}
+.scanrow{display:flex;gap:12px;align-items:flex-start}
+.scanrow img{width:84px;height:112px;object-fit:contain;border-radius:8px;border:1px solid var(--line);flex:none;background:var(--bg)}
 .scaninfo{display:flex;flex-direction:column;gap:8px;min-width:0;flex:1}
-#scanMsg{margin:0;font-size:14px;line-height:1.5;font-weight:600}
+p.scmsg{margin:0;font-size:14px;line-height:1.5;font-weight:600}
 .accept{display:flex;align-items:center;gap:10px;border:1.5px solid var(--line);background:var(--paper);border-radius:12px;padding:13px 14px;font-weight:700;font-size:16px;text-align:left}
 .accept small{font-weight:500;color:var(--muted);font-size:13px;margin-left:auto}
 .accept .box{width:22px;height:22px;border-radius:6px;border:2px solid var(--line);flex:none;display:grid;place-items:center}
@@ -146,7 +147,7 @@ input.num{font-family:var(--num)}
 .accept[aria-pressed="true"] .box{background:var(--accent);border-color:var(--accent)}
 .accept[aria-pressed="true"] .box::after{content:"";width:6px;height:11px;border:solid var(--paper);border-width:0 2.5px 2.5px 0;transform:translateY(-1px) rotate(45deg)}
 .namenote{display:block;margin-top:4px;font-weight:500;color:var(--accent)}
-#scanMsg small{display:block;font-weight:500;color:var(--muted);font-family:var(--num);font-size:12px}
+p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(--num);font-size:12px}
 .scansave{width:100%;border:0;background:var(--accent);color:var(--paper);border-radius:12px;padding:15px 12px;font-weight:700;font-size:16px;line-height:1.35}
 .scansave small{display:block;font-weight:500;font-size:12.5px;opacity:.9}
 .scansave.done{background:var(--chip);color:var(--ink)}
@@ -161,6 +162,9 @@ input.num{font-family:var(--num)}
 .scdot{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;border:3px solid #fff;background:rgba(61,111,196,.55);box-shadow:0 0 0 2px rgba(0,0,0,.35);touch-action:none}
 .scdot.on{background:rgba(126,166,236,.9);transform:scale(1.15)}
 .scfoot{display:flex;gap:8px}
+.scstep{font-size:20px}
+.scnext{font-size:12.5px;color:#9fb6e0}
+.scskip{border:1px solid #3a4456;background:#1a2230;color:#dfe6f2;border-radius:12px;padding:12px;font-weight:600;font-size:15px}
 .scstage video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
 .scline polygon.weak{stroke:#9aa6b8;stroke-dasharray:8 6;fill:none}
 .camflash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
@@ -605,22 +609,21 @@ input.num{font-family:var(--num)}
     try{return warpScan(src,detectQuad(src))}catch(e){src._photo=src;return src}
   }
   /* ---------- 스캔 카메라: 종이 테두리를 실시간으로 보여 주고 셔터를 누르면 바로 스캔 ---------- */
-  function openCamera(onPick){
+  // opts: {step:'① 상차 계근표', next:'다음: 하차 계근표', onPick:()=>{}, skipLabel:'건너뛰기'}
+  // 결과: {canvas} | {pick:true} | {skip:true} | null(취소)
+  function openCamera(opts){
     const can=navigator.mediaDevices&&navigator.mediaDevices.getUserMedia;
-    if(!can){onPick();return Promise.resolve(null)}
+    if(!can){opts.onPick();return Promise.resolve({pick:true})}
     return new Promise(resolve=>{
       const ov=document.createElement('div');ov.className='scanner';
-      ov.innerHTML=`<div class="scbar"><b>계근표 스캔</b><span id="camHint">계근표가 화면에 꽉 차게 비춰 주세요</span></div>
+      ov.innerHTML=`<div class="scbar"><b class="scstep">${esc(opts.step)}</b><span id="camHint">계근표가 화면에 꽉 차게 비춰 주세요</span>${opts.next?`<small class="scnext">${esc(opts.next)}</small>`:''}</div>
         <div class="scstage"><video playsinline muted autoplay></video><svg class="scline"><polygon></polygon></svg><div class="camflash"></div></div>
-        <div class="scfoot camfoot"><button type="button" data-a="cancel">취소</button><button type="button" data-a="shot" class="shutter" aria-label="찍기"><span></span></button><button type="button" data-a="pick">사진첩</button></div>`;
+        ${opts.skipLabel?`<button type="button" class="scskip" data-a="skip">${esc(opts.skipLabel)}</button>`:''}
+        <div class="scfoot camfoot"><button type="button" data-a="cancel">${opts.cancelLabel||'취소'}</button><button type="button" data-a="shot" class="shutter" aria-label="찍기"><span></span></button><button type="button" data-a="pick">사진첩</button></div>`;
       document.body.appendChild(ov);
       const video=ov.querySelector('video'),stage=ov.querySelector('.scstage'),poly=ov.querySelector('polygon'),hint=ov.querySelector('#camHint'),shot=ov.querySelector('[data-a=shot]');
       let stream=null,timer=null,quad=null,closed=false;
       const small=document.createElement('canvas');
-      const stop=()=>{closed=true;clearInterval(timer);removeEventListener('resize',drawQuad);if(stream)stream.getTracks().forEach(t=>t.stop());ov.remove()};
-      const done=v=>{stop();resolve(v)};
-      ov.querySelector('[data-a=cancel]').onclick=()=>done(null);
-      ov.querySelector('[data-a=pick]').onclick=()=>{done(null);onPick()};
       const map=()=>{ // 영상 좌표 → 화면 좌표
         const r=stage.getBoundingClientRect(),vw=video.videoWidth,vh=video.videoHeight;
         const k=Math.min(r.width/vw,r.height/vh);return {k,ox:(r.width-vw*k)/2,oy:(r.height-vh*k)/2};
@@ -631,6 +634,11 @@ input.num{font-family:var(--num)}
         poly.setAttribute('points',quad.map(([x,y])=>`${ox+x*k},${oy+y*k}`).join(' '));
         poly.classList.toggle('weak',!quad.found);
       };
+      const stop=()=>{closed=true;clearInterval(timer);removeEventListener('resize',drawQuad);if(stream)stream.getTracks().forEach(t=>t.stop());ov.remove()};
+      const done=v=>{stop();resolve(v)};
+      ov.querySelector('[data-a=cancel]').onclick=()=>done(null);
+      ov.querySelector('[data-a=pick]').onclick=()=>{done({pick:true});opts.onPick()};
+      const sk=ov.querySelector('[data-a=skip]');if(sk)sk.onclick=()=>done({skip:true});
       const tick=()=>{
         if(closed||!video.videoWidth)return;
         const k=Math.min(1,360/Math.max(video.videoWidth,video.videoHeight));
@@ -650,7 +658,7 @@ input.num{font-family:var(--num)}
         hint.textContent='스캔하는 중…';
         await new Promise(r=>setTimeout(r,30));
         let out;try{out=warpScan(c,detectQuad(c))}catch(e){c._photo=c;out=c}
-        done(out);
+        done({canvas:out});
       };
       navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:2560},height:{ideal:1440}}})
         .then(s=>{if(closed){s.getTracks().forEach(t=>t.stop());return}stream=s;video.srcObject=s;video.play().catch(()=>{});timer=setInterval(tick,350)})
@@ -721,7 +729,7 @@ input.num{font-family:var(--num)}
     }
     return best||{values:lastVals,match:null,deg:0,text:lastText};
   }
-  let scanBlob=null;
+  let scanBlobs={};
   /* ---------- 계근표 → 회사 이름 기억하기 ---------- */
   // 계근표의 전화번호·홈페이지·영어 회사 이름을 소열님이 쓰는 이름과 짝지어 기억
   const TOKEN_STOP=new Set(['KG','MT','NO','FAX','TEL','BULK','THE','AND','LTD','INC','CO','KOREA','AM','PM','DATE','TIME','WEIGHT','GROSS','TARE','NET','TON','HCL']);
@@ -754,32 +762,28 @@ input.num{font-family:var(--num)}
   let scanToks={};
 
   function wireScan(){
-    scanToks={};
+    scanToks={};scanBlobs={};
     const inp=$('scanFile');if(!inp)return;
-    let target=null;
-    const pickPhoto=()=>{inp.value='';inp.click()};
-    document.querySelectorAll('[data-scan]').forEach(b=>b.onclick=()=>{
-      target=b.dataset.scan;
-      openCamera(pickPhoto).then(c=>{if(c)run(()=>Promise.resolve(c))});
-    });
-    const saveBtn=$('scanSave');
-    const saveLabel=()=>{saveBtn.classList.remove('done');saveBtn.innerHTML='📥 스캔본 사진첩에 저장<small>누른 뒤 아래 공유창에서 “이미지 저장”을 누르세요</small>'};
-    const run=async getScanned=>{
-      if(!target)return;
-      const out=$('scanOut'),msg=$('scanMsg'),chips=$('scanChips'),img=$('scanImg'),save=$('scanSave');
+    const steps=$('fLoad')?['fLoad','fUnload']:['fUnload'];
+    const LABEL={fLoad:'상차',fUnload:'하차'};
+    let pending=null; // 사진첩에서 고를 때: {target, next}
+
+    // 한 장 처리: 스캔본 → 숫자·날짜·회사 이름 읽기 → 칸 채우기
+    const run=async(target,getScanned)=>{
+      const out=$('scanOut_'+target),msg=out.querySelector('.scmsg'),chips=out.querySelector('.chips'),img=out.querySelector('img'),save=out.querySelector('.scansave');
+      const label=LABEL[target];
+      const saveLabel=()=>{save.classList.remove('done');save.innerHTML=`📥 ${label} 스캔본 사진첩에 저장<small>누른 뒤 아래 공유창에서 “이미지 저장”을 누르세요</small>`};
       out.hidden=false;chips.innerHTML='';save.hidden=true;saveLabel();img.removeAttribute('src');
-      msg.style.color='';msg.textContent='스캔하는 중…';
-      document.querySelectorAll('[data-scan]').forEach(b=>b.disabled=true);
+      msg.style.color='';msg.textContent=`${label} 계근표 스캔하는 중…`;
       const scanned=await getScanned();
-      if(!scanned){msg.style.color='var(--danger)';msg.textContent='사진을 열지 못했어요. 다시 찍어 주세요.';document.querySelectorAll('[data-scan]').forEach(b=>b.disabled=false);return}
-      scanBlob=await canvasBlob(scanned);
-      try{img.src=URL.createObjectURL(scanBlob)}catch(e){}
-      const label=target==='fLoad'?'상차':'하차';
+      if(!scanned){msg.style.color='var(--danger)';msg.textContent='사진을 열지 못했어요. 다시 찍어 주세요.';return}
+      scanBlobs[target]=await canvasBlob(scanned);
+      try{img.src=URL.createObjectURL(scanBlobs[target])}catch(e){}
       msg.style.color='';msg.innerHTML=`${label} 계근표 읽는 중…<small>처음 한 번은 읽기 도구를 받느라 10초쯤 걸려요</small>`;
-      document.querySelectorAll('[data-scan]').forEach(b=>b.disabled=true);
       try{
         const p=await readTicket([scanned._photo,scanned._plain],deg=>{if(deg)msg.innerHTML=`${label} 계근표 읽는 중…<small>사진 방향을 돌려서 다시 보는 중</small>`});
         const field=$(target);
+        if(!field){return} // 그사이 입력창을 닫았으면 그만
         const role=target==='fLoad'?'from':'to',nameEl=$(target==='fLoad'?'fFrom':'fTo');
         scanToks[target]=ticketTokens(p.text);
         let nameNote='';
@@ -811,28 +815,52 @@ input.num{font-family:var(--num)}
           chips.innerHTML=p.values.length?'<span class="hint" style="width:100%">읽은 숫자 중에 있으면 누르세요</span>'+p.values.map(v=>`<button type="button" data-pick="${v}">${v.toFixed(2)}</button>`).join(''):'';
         }
         if(nameNote){const sm=document.createElement('span');sm.className='namenote';sm.innerHTML=nameNote;msg.insertBefore(sm,msg.querySelector('small'))}
-        if(p.deg){scanBlob=await canvasBlob(rotated(scanned,p.deg));try{img.src=URL.createObjectURL(scanBlob)}catch(e){}}
+        if(p.deg){scanBlobs[target]=await canvasBlob(rotated(scanned,p.deg));try{img.src=URL.createObjectURL(scanBlobs[target])}catch(e){}}
         save.hidden=false;
         chips.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{field.value=(+b.dataset.pick).toFixed(2);field.dispatchEvent(new Event('input'));toast(`${label}수량을 ${field.value}(으)로 바꿨어요`)});
       }catch(e){
         save.hidden=false;
         msg.style.color='var(--danger)';msg.textContent='읽기 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요. 스캔본은 사진첩에 저장할 수 있어요.';
       }
-      document.querySelectorAll('[data-scan]').forEach(b=>b.disabled=false);
     };
-    inp.onchange=()=>{const f=inp.files&&inp.files[0];if(f)run(()=>autoScan(f))};
-    $('scanSave').onclick=async()=>{
-      const f=scanBlob;if(!f)return;
-      const name=`계근표_${ym.y}${String(ym.m).padStart(2,'0')}${String(($('fD')&&$('fD').value)||'').padStart(2,'0')}.jpg`;
+
+    // 스캔 버튼 하나로: 상차 계근표 → 하차 계근표 차례로
+    const step=async i=>{
+      if(i>=steps.length||!$('frm'))return;
+      const t=steps[i],two=steps.length>1,last=i===steps.length-1;
+      const res=await openCamera({
+        step:two?`${i+1}/2 · ${LABEL[t]} 계근표`:`${LABEL[t]} 계근표`,
+        next:!last?`찍으면 바로 ${LABEL[steps[i+1]]} 계근표 차례예요`:'',
+        skipLabel:t==='fUnload'&&two?'하차 계근표 없음 · 상차수량 인정':(t==='fLoad'&&two?'상차는 건너뛰고 하차 계근표 찍기':''),
+        cancelLabel:i>0?'그만':'취소',
+        onPick:()=>{pending={target:t,next:()=>step(i+1)};inp.value='';inp.click()}
+      });
+      if(!res)return;
+      if(res.canvas){run(t,()=>Promise.resolve(res.canvas));step(i+1);return}
+      if(res.skip){
+        if(t==='fUnload'){const acc=$('fAccept');if(acc&&acc.getAttribute('aria-pressed')!=='true')acc.click()}
+        else step(i+1);
+      }
+    };
+    const startBtn=$('scanStart');
+    if(startBtn)startBtn.onclick=()=>step(0);
+    inp.onchange=()=>{
+      const f=inp.files&&inp.files[0];if(!f||!pending)return;
+      const {target,next}=pending;pending=null;
+      run(target,()=>autoScan(f));next();
+    };
+    document.querySelectorAll('.scansave').forEach(b=>b.onclick=async()=>{
+      const target=b.dataset.for,f=scanBlobs[target];if(!f)return;
+      const name=`계근표_${LABEL[target]}_${ym.y}${String(ym.m).padStart(2,'0')}${String(($('fD')&&$('fD').value)||'').padStart(2,'0')}.jpg`;
       const file=new File([f],name,{type:'image/jpeg'});
       try{
         if(navigator.canShare&&navigator.canShare({files:[file]})){
           await navigator.share({files:[file]});
-          saveBtn.classList.add('done');saveBtn.innerHTML='✓ 공유창으로 보냈어요<small>“이미지 저장”을 눌렀으면 사진첩에 들어갔어요. 다시 저장하려면 누르세요</small>';
+          b.classList.add('done');b.innerHTML=`✓ ${LABEL[target]} 스캔본 보냈어요<small>“이미지 저장”을 눌렀으면 사진첩에 들어갔어요. 다시 저장하려면 누르세요</small>`;
           return}
       }catch(e){if(e&&e.name==='AbortError'){toast('저장하지 않았어요. 공유창에서 “이미지 저장”을 눌러야 들어가요');return}}
       const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
-    };
+    });
   }
 
   function openForm(mode,idx){
@@ -862,19 +890,13 @@ input.num{font-family:var(--num)}
         <label>메모<input id="fNote" value="${esc(r.note)}" placeholder="예: 상차수량"></label>
       </div>
       <div class="scan">
-        <div class="scanbtns">
-          ${isSplit?'':'<button type="button" class="scanbtn" data-scan="fLoad">📷 상차 계근표</button>'}
-          <button type="button" class="scanbtn" data-scan="fUnload">📷 하차 계근표</button>
-        </div>
+        <button type="button" class="scanbtn" id="scanStart">📷 계근표 스캔 <small>${isSplit?'하차 계근표':'상차 → 하차 차례로'}</small></button>
         <input id="scanFile" type="file" accept="image/*" hidden>
-        <div id="scanOut" hidden>
-          <img id="scanImg" alt="찍은 계근표">
-          <div class="scaninfo">
-            <p id="scanMsg"></p>
-            <div class="chips" id="scanChips"></div>
-          </div>
-        </div>
-        <button type="button" id="scanSave" class="scansave" hidden>📥 스캔본 사진첩에 저장</button>
+        ${(isSplit?['fUnload']:['fLoad','fUnload']).map(t=>`<div class="scanres" id="scanOut_${t}" hidden>
+          <div class="scanrow"><img alt="${t==='fLoad'?'상차':'하차'} 계근표 스캔본">
+            <div class="scaninfo"><p class="scmsg"></p><div class="chips"></div></div></div>
+          <button type="button" class="scansave" data-for="${t}" hidden></button>
+        </div>`).join('')}
       </div>
       <div class="row">
         <button type="button" id="cancel">닫기</button>
