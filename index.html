@@ -826,7 +826,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
           chips.innerHTML=p.values.length?'<span class="hint" style="width:100%">읽은 숫자 중에 있으면 누르세요</span>'+p.values.map(v=>`<button type="button" data-pick="${v}">${v.toFixed(2)}</button>`).join(''):'';
         }
         if(nameNote){const sm=document.createElement('span');sm.className='namenote';sm.innerHTML=nameNote;msg.insertBefore(sm,msg.querySelector('small'))}
-        if(p.deg){scanBlobs[target]=await canvasBlob(rotated(scanned,p.deg));try{img.src=URL.createObjectURL(scanBlobs[target])}catch(e){}}
+        // 사진첩에는 찍은 방향 그대로 저장 (글자 방향에 맞춰 돌리지 않음)
         save.hidden=false;
         chips.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{field.value=(+b.dataset.pick).toFixed(2);field.dispatchEvent(new Event('input'));toast(`${label}수량을 ${field.value}(으)로 바꿨어요`)});
       }catch(e){
