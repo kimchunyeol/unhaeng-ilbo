@@ -1001,8 +1001,13 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   }
   const tkey=t=>t.replace(/[.\/]/g,'_');
   const baseName=v=>String(v||'').replace(/\(\s*\d+\s*\)\s*$/,'').trim();
+  // 처음부터 알고 있는 계근표 (전화번호·홈페이지 → 소열님이 쓰는 이름). 직접 적어 저장한 이름이 있으면 그쪽이 우선
+  const KNOWN_TICKETS={
+    from:{'tel:0316831472':{'대아탱크':1},'tel:0316831474':{'대아탱크':1},'web:scm_unid_co_kr':{'울산유니드':1}},
+    to:{'tel:0416608732':{'KCC대죽':1},'tel:0416608719':{'KCC대죽':1}}
+  };
   function lookupName(role,toks){
-    const m=(ticketMap&&ticketMap[role])||{},score={};
+    const m=Object.assign({},KNOWN_TICKETS[role]||{},(ticketMap&&ticketMap[role])||{}),score={};
     // 전화번호·홈페이지는 3점, 영어 단어는 1점(여러 회사에서 나온 단어는 안 셈). 3점 이상이어야 채움
     (toks||[]).forEach(t=>{const e=m[tkey(t)];if(!e)return;
       const isWord=t.startsWith('w:');if(isWord&&Object.keys(e).length>1)return;
