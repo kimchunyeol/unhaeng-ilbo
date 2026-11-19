@@ -163,6 +163,10 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
 .scdot.on{background:rgba(126,166,236,.9);transform:scale(1.15)}
 .scfoot{display:flex;gap:8px}
 .scstep{font-size:20px}
+.sctop{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.scauto{border:1px solid #3a4456;background:#1a2230;color:#dfe6f2;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700}
+.scauto[aria-pressed="true"]{background:#ffcc00;color:#1a1a1a;border-color:#ffcc00}
+.scline polygon.ready{fill:rgba(255,204,0,.38);stroke-width:4}
 .scnext{font-size:12.5px;color:#9fb6e0}
 .scskip{border:1px solid #3a4456;background:#1a2230;color:#dfe6f2;border-radius:12px;padding:12px;font-weight:600;font-size:15px}
 .scstage video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
@@ -602,11 +606,222 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     for(let j=0;j<W*H;j++){const v=out[j];pi.data[j*4]=pi.data[j*4+1]=pi.data[j*4+2]=v;pi.data[j*4+3]=255}
     pc.putImageData(pi,0,0);res._plain=plain;res._photo=c;return res;
   }
+  /* ---------- 종이 테두리 찾기 (스캔 앱 방식) ----------
+     1) 밝기가 확 바뀌는 곳(테두리)을 찾고  2) 그중 곧은 선들을 골라
+     3) 위·아래·왼쪽·오른쪽 네 선으로 만들 수 있는 사각형 중 "테두리를 따라 선이 진하고, 안쪽이 바깥보다 밝은" 것을 고르고
+     4) 큰 화면에서 각 변을 실제 테두리에 딱 맞게 다듬음 */
+  function paperEdges(c){
+    const s=toCanvas(c,320),W=s.width,H=s.height,N=W*H;
+    const g0=grayOf(s),g=new Float32Array(N),t=new Float32Array(N);
+    for(let i=0;i<N;i++)g[i]=g0[i];
+    // 흐리게 두 번 (잡티 줄이기)
+    for(let pass=0;pass<2;pass++){
+      for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;t[i]=(g[y*W+Math.max(0,x-1)]+g[i]+g[y*W+Math.min(W-1,x+1)])/3}
+      for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;g[i]=(t[Math.max(0,y-1)*W+x]+t[i]+t[Math.min(H-1,y+1)*W+x])/3}
+    }
+    const gx=new Float32Array(N),gy=new Float32Array(N),mag=new Float32Array(N);
+    for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+      const i=y*W+x;
+      const a=g[i-W-1],b=g[i-W],cc=g[i-W+1],d=g[i-1],f=g[i+1],h1=g[i+W-1],h2=g[i+W],h3=g[i+W+1];
+      const sx=(cc+2*f+h3)-(a+2*d+h1),sy=(h1+2*h2+h3)-(a+2*b+cc);
+      gx[i]=sx;gy[i]=sy;mag[i]=Math.hypot(sx,sy);
+    }
+    return {s,W,H,g,gx,gy,mag};
+  }
+  function houghLines(E){
+    const {W,H,gx,gy,mag}=E,N=W*H;
+    // 진한 테두리 문턱값: 상위 10% 이상, 최소 40
+    const sample=[];for(let i=0;i<N;i+=7)if(mag[i]>0)sample.push(mag[i]);
+    sample.sort((a,b)=>a-b);
+    const T=Math.max(28,sample[Math.floor(sample.length*0.88)]||28);
+    const D=Math.ceil(Math.hypot(W,H)),NT=180,NR=2*D+1;
+    const acc=new Float32Array(NT*NR);
+    const cs=new Float32Array(NT),sn=new Float32Array(NT);
+    for(let t=0;t<NT;t++){cs[t]=Math.cos(t*Math.PI/NT);sn[t]=Math.sin(t*Math.PI/NT)}
+    for(let y=2;y<H-2;y++)for(let x=2;x<W-2;x++){
+      const i=y*W+x,m=mag[i];if(m<T)continue;
+      // 밝기 변화 방향 = 선의 법선 방향 → 그 근처 각도만 투표
+      let th=Math.atan2(gy[i],gx[i]);if(th<0)th+=Math.PI;if(th>=Math.PI)th-=Math.PI;
+      const tc=Math.round(th*NT/Math.PI);
+      for(let dt=-6;dt<=6;dt++){
+        const t=(tc+dt+NT)%NT;
+        const r=Math.round(x*cs[t]+y*sn[t])+D;
+        acc[t*NR+r]+=1;
+      }
+    }
+    // 봉우리 고르기: 표가 큰 것부터, 이미 고른 선과 거의 같은 선은 건너뜀
+    const minV=Math.min(W,H)*0.18,cand=[];
+    for(let t=0;t<NT;t++)for(let r=0;r<NR;r++){const v=acc[t*NR+r];if(v>=minV)cand.push(t*NR+r)}
+    cand.sort((a,b)=>acc[b]-acc[a]);
+    const peaks=[];
+    for(const id of cand){
+      const t=(id/NR)|0,r=id%NR-D,th=t*Math.PI/NT;
+      let dup=false;
+      for(const p of peaks){
+        let dth=Math.abs(th-p.t),dr=Math.abs(r-p.r);
+        if(dth>Math.PI/2){dth=Math.PI-dth;dr=Math.abs(r+p.r)} // 0°와 180° 근처는 같은 방향
+        if(dth<6*Math.PI/180&&dr<8){dup=true;break}
+      }
+      if(!dup){peaks.push({t:th,r,v:acc[id]});if(peaks.length>=22)break}
+    }
+    return peaks;
+  }
+  function lineX(a,b){ // 두 선(법선각 t, 거리 r)의 교점
+    const d=Math.cos(a.t)*Math.sin(b.t)-Math.sin(a.t)*Math.cos(b.t);
+    if(Math.abs(d)<1e-6)return null;
+    return [(a.r*Math.sin(b.t)-b.r*Math.sin(a.t))/d,(b.r*Math.cos(a.t)-a.r*Math.cos(b.t))/d];
+  }
+  function scoreQuad(E,q){
+    const {W,H,g,gx,gy,mag}=E;
+    const at=(arr,x,y)=>{const xi=Math.round(x),yi=Math.round(y);if(xi<1||yi<1||xi>=W-1||yi>=H-1)return null;return arr[yi*W+xi]};
+    const cx=(q[0][0]+q[1][0]+q[2][0]+q[3][0])/4,cy=(q[0][1]+q[1][1]+q[2][1]+q[3][1])/4;
+    let sup=0,con=0,minSup=1,outside=0,minCon=1;
+    for(let k=0;k<4;k++){
+      const a=q[k],b=q[(k+1)%4],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);
+      let nx=-dy/len,ny=dx/len;const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2;
+      if((cx-mx)*nx+(cy-my)*ny>0){nx=-nx;ny=-ny} // 바깥쪽
+      const onBorder=(Math.abs(a[0]-b[0])<2&&(a[0]<2||a[0]>W-3))||(Math.abs(a[1]-b[1])<2&&(a[1]<2||a[1]>H-3));
+      if(onBorder){sup+=0.5;minSup=Math.min(minSup,0.5);continue}
+      let hit=0,tot=0,cIn=0,cOut=0,cn=0;
+      for(let i=1;i<30;i++){
+        const u=i/30,px=a[0]+dx*u,py=a[1]+dy*u;
+        if(px<1||py<1||px>=W-1||py>=H-1){outside++;continue}
+        tot++;
+        let best=0;
+        for(let o=-1.5;o<=1.5;o+=0.5){const m=at(mag,px+nx*o,py+ny*o);if(m==null)continue;
+          const gxv=at(gx,px+nx*o,py+ny*o),gyv=at(gy,px+nx*o,py+ny*o);
+          const align=Math.abs(gxv*nx+gyv*ny)/(m||1);if(align>0.85&&m>best)best=m}
+        if(best>30)hit++;
+        // 안쪽·바깥쪽 밝기를 몇 군데에서 보고 (글자 때문에 튀지 않게)
+        for(const o of [3,6,9]){const vi=at(g,px-nx*o,py-ny*o),vo=at(g,px+nx*o,py+ny*o);if(vi!=null&&vo!=null){cIn+=vi;cOut+=vo;cn++}}
+      }
+      const r=tot?hit/tot:0;sup+=r;minSup=Math.min(minSup,r);
+      const cs=cn?Math.max(-1,Math.min(1,(cIn-cOut)/cn/25)):-1;con+=cs;minCon=Math.min(minCon,cs);
+    }
+    const area=quadArea(q)/(W*H);
+    return {score:sup+1.5*con+2.0*Math.sqrt(area)-0.04*outside,minSup,area,con,minCon};
+  }
+  function orderQuad(pts){
+    const cx=pts.reduce((a,p)=>a+p[0],0)/4,cy=pts.reduce((a,p)=>a+p[1],0)/4;
+    const srt=pts.slice().sort((p,q)=>Math.atan2(p[1]-cy,p[0]-cx)-Math.atan2(q[1]-cy,q[0]-cx)); // 왼위→오위→오아래→왼아래 (화면 좌표)
+    // 맨 왼쪽 위(x+y 가장 작은 점)부터 시작
+    let k=0,best=1e9;srt.forEach((p,i)=>{if(p[0]+p[1]<best){best=p[0]+p[1];k=i}});
+    return [0,1,2,3].map(i=>srt[(k+i)%4]);
+  }
+  function quadArea(q){let a=0;for(let i=0;i<4;i++){const [x1,y1]=q[i],[x2,y2]=q[(i+1)%4];a+=x1*y2-x2*y1}return Math.abs(a)/2}
+  function isConvex(q){let sg=0;for(let i=0;i<4;i++){const a=q[i],b=q[(i+1)%4],c=q[(i+2)%4];const z=(b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]);const s=Math.sign(z);if(!s)return false;if(!sg)sg=s;else if(s!==sg)return false}return true}
+  function roughPaper(c){
+    const E=paperEdges(c),L=houghLines(E),W=E.W,H=E.H;
+    // 가로에 가까운 선(위·아래)과 세로에 가까운 선(왼쪽·오른쪽)
+    const hor=L.filter(l=>Math.abs(Math.sin(l.t))>0.7),ver=L.filter(l=>Math.abs(Math.sin(l.t))<=0.7);
+    // 화면 가장자리도 테두리 후보 (종이가 화면 밖으로 살짝 나간 경우)
+    hor.push({t:Math.PI/2,r:0.5,v:0,border:true},{t:Math.PI/2,r:H-1.5,v:0,border:true});
+    ver.push({t:0,r:0.5,v:0,border:true},{t:0,r:W-1.5,v:0,border:true});
+    const cands=[];
+    for(let i=0;i<hor.length;i++)for(let j=i+1;j<hor.length;j++)
+    for(let k=0;k<ver.length;k++)for(let m=k+1;m<ver.length;m++){
+      const pts=[lineX(hor[i],ver[k]),lineX(hor[i],ver[m]),lineX(hor[j],ver[m]),lineX(hor[j],ver[k])];
+      if(pts.some(p=>!p||p[0]<-W*0.05||p[1]<-H*0.05||p[0]>W*1.05||p[1]>H*1.05))continue;
+      const q=orderQuad(pts);
+      if(!isConvex(q))continue;
+      const ar=quadArea(q)/(W*H);if(ar<0.1||ar>0.995)continue;
+      const sc=scoreQuad(E,q);
+      const nb=[hor[i],hor[j],ver[k],ver[m]].filter(l=>l.border).length;
+      if(nb>2)continue;            // 화면 가장자리는 두 변까지만 (가까이 대고 찍어 종이가 화면 밖으로 나간 경우)
+      if(sc.minSup<0.25)continue;
+      // 종이 테두리는 안쪽(종이)이 바깥보다 밝아야 함 → 종이 안의 표 선은 양쪽이 다 하얘서 걸러짐
+      if(sc.minCon<0.3)continue;
+      sc.score-=0.25*nb;           // 진짜 테두리가 있으면 그쪽을 더 믿음
+      cands.push({q,sc});
+    }
+    if(!cands.length)return null;
+    cands.sort((a,b)=>b.sc.score-a.sc.score);
+    // 밝은 곳(종이로 보이는 곳)을 거의 다 품고, 안쪽이 대부분 밝은 사각형만 인정
+    const g=E.g,N=W*H,hist=new Array(256).fill(0);for(let i=0;i<N;i++)hist[Math.max(0,Math.min(255,g[i]|0))]++;
+    let sum=0;for(let i=0;i<256;i++)sum+=i*hist[i];let sB=0,wB=0,bv=0,th=128;
+    for(let t2=0;t2<256;t2++){wB+=hist[t2];if(!wB)continue;const wF=N-wB;if(!wF)break;sB+=t2*hist[t2];const mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)*(mB-mF);if(v>bv){bv=v;th=t2}}
+    const bright=[];for(let y=1;y<H;y+=2)for(let x=1;x<W;x+=2)if(g[y*W+x]>th)bright.push(x,y);
+    const nBright=bright.length/2;
+    const inside=(q,x,y)=>{let sg=0;for(let i=0;i<4;i++){const a=q[i],b=q[(i+1)%4];const z=(b[0]-a[0])*(y-a[1])-(b[1]-a[1])*(x-a[0]);const s2=z>0?1:z<0?-1:0;if(!s2)continue;if(!sg)sg=s2;else if(s2!==sg)return false}return true};
+    for(const cd of cands.slice(0,8)){
+      let inB=0;for(let i=0;i<bright.length;i+=2)if(inside(cd.q,bright[i],bright[i+1]))inB++;
+      const cover=nBright?inB/nBright:0,fill=inB/Math.max(1,cd.sc.area*N/4);
+      if(cover>=0.8&&fill>=0.55){const k=c.width/W;return cd.q.map(([x,y])=>[x*k,y*k])}
+    }
+    return null;
+  }
+  // 큰 화면에서 각 변을 실제 테두리 선에 맞게 다듬기
+  function refineQuad(g,W,H,q,Rfrac){
+    const R=Math.max(4,Math.round(Math.max(W,H)*(Rfrac||0.012)));
+    const at=(x,y)=>{x=Math.max(0,Math.min(W-1,x));y=Math.max(0,Math.min(H-1,y));const x0=x|0,y0=y|0,x1=Math.min(W-1,x0+1),y1=Math.min(H-1,y0+1),fx=x-x0,fy=y-y0;
+      return (g[y0*W+x0]*(1-fx)+g[y0*W+x1]*fx)*(1-fy)+(g[y1*W+x0]*(1-fx)+g[y1*W+x1]*fx)*fy};
+    const cx=(q[0][0]+q[1][0]+q[2][0]+q[3][0])/4,cy=(q[0][1]+q[1][1]+q[2][1]+q[3][1])/4;
+    const lines=[];
+    for(let s=0;s<4;s++){
+      const a=q[s],b=q[(s+1)%4],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);
+      let nx=-dy/len,ny=dx/len;const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2;
+      if((cx-mx)*nx+(cy-my)*ny>0){nx=-nx;ny=-ny} // 바깥쪽
+      // 화면 가장자리에 붙은 변은 그대로 둠 (종이가 화면 밖으로 나간 쪽)
+      const eb=3;
+      if((a[0]<eb&&b[0]<eb)||(a[0]>W-1-eb&&b[0]>W-1-eb)||(a[1]<eb&&b[1]<eb)||(a[1]>H-1-eb&&b[1]>H-1-eb)){lines.push({mx,my,dx:dx/len,dy:dy/len});continue}
+      const pts=[];const NS=Math.max(12,Math.round(len/10));
+      for(let i=1;i<NS;i++){
+        const u=0.06+0.88*i/NS,px=a[0]+dx*u,py=a[1]+dy*u;
+        if(px<1||py<1||px>W-2||py>H-2)continue;
+        let bestG=0,bestO=null;
+        for(let o=-R;o<=R;o+=0.5){
+          // 안쪽(종이)이 바깥보다 밝은 쪽으로 바뀌는 곳
+          const gi=at(px+nx*(o-1.5),py+ny*(o-1.5)),go=at(px+nx*(o+1.5),py+ny*(o+1.5));
+          const gr=gi-go;
+          if(gr>bestG){bestG=gr;bestO=o}
+        }
+        if(bestO!==null&&bestG>8)pts.push([px+nx*bestO,py+ny*bestO]);
+      }
+      if(pts.length<5){lines.push(null);continue}
+      const fit=P=>{const n=P.length;let mx=0,my=0;P.forEach(p=>{mx+=p[0];my+=p[1]});mx/=n;my/=n;
+        let sxx=0,sxy=0,syy=0;P.forEach(p=>{const x=p[0]-mx,y=p[1]-my;sxx+=x*x;sxy+=x*y;syy+=y*y});
+        const th=0.5*Math.atan2(2*sxy,sxx-syy);return {mx,my,dx:Math.cos(th),dy:Math.sin(th)}};
+      let Ln=fit(pts);
+      const dist=(L,p)=>Math.abs((p[0]-L.mx)*L.dy-(p[1]-L.my)*L.dx);
+      for(let it=0;it<2;it++){
+        const ds=pts.map(p=>dist(Ln,p)).sort((x,y)=>x-y),cut=Math.max(1.2,ds[Math.floor(ds.length*0.6)]*1.6);
+        const inl=pts.filter(p=>dist(Ln,p)<=cut);if(inl.length>=5)Ln=fit(inl);
+      }
+      lines.push(Ln);
+    }
+    return q.map((p,i)=>{
+      const L1=lines[(i+3)%4],L2=lines[i];if(!L1||!L2)return p;
+      const den=L1.dx*L2.dy-L1.dy*L2.dx;if(Math.abs(den)<1e-6)return p;
+      const t=((L2.mx-L1.mx)*L2.dy-(L2.my-L1.my)*L2.dx)/den;
+      const r=[L1.mx+L1.dx*t,L1.my+L1.dy*t];
+      return Math.hypot(r[0]-p[0],r[1]-p[1])>R*3?p:r;
+    });
+  }
+  // 바깥에서 쓰는 함수: 캔버스 c의 종이 네 모서리 (q.found 표시)
+  // detail: 다듬기에 쓸 크기 (실시간은 작게, 찍을 때는 크게)
+  function findPaper(c,detail){
+    let q=null;try{q=roughPaper(c)}catch(e){q=null}
+    if(!q){
+      // 종이가 화면을 거의 채운 경우: 밝은 덩어리 방식
+      const d=detectQuad(c);
+      if(d.found&&quadArea(d)<c.width*c.height*0.995)q=d.map(p=>p.slice());
+      else{const f=[[0,0],[c.width,0],[c.width,c.height],[0,c.height]];f.found=false;return f} // 못 찾으면 자르지 않음
+    }
+    if(detail){
+      const big=toCanvas(c,detail),kb=c.width/big.width,g=grayOf(big);
+      let r=q.map(([x,y])=>[x/kb,y/kb]);
+      r=refineQuad(g,big.width,big.height,r,0.02);
+      r=refineQuad(g,big.width,big.height,r,0.008);
+      q=r.map(([x,y])=>[x*kb,y*kb]);
+    }
+    q.found=true;return q;
+  }
+
   // 바로 스캔: 모서리를 자동으로 찾아서 곧장 펴기 (조금 어긋나도 그대로)
   async function autoScan(file){
     let src;try{src=toCanvas(await loadImg(file),2600)}catch(e){return null}
     await new Promise(r=>setTimeout(r,20));
-    try{return warpScan(src,detectQuad(src))}catch(e){src._photo=src;return src}
+    try{return warpScan(src,findPaper(src,1400))}catch(e){src._photo=src;return src}
   }
   /* ---------- 스캔 카메라: 종이 테두리를 실시간으로 보여 주고 셔터를 누르면 바로 스캔 ---------- */
   // opts: {step:'① 상차 계근표', next:'다음: 하차 계근표', onPick:()=>{}, skipLabel:'건너뛰기'}
@@ -616,13 +831,19 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     if(!can){opts.onPick();return Promise.resolve({pick:true})}
     return new Promise(resolve=>{
       const ov=document.createElement('div');ov.className='scanner';
-      ov.innerHTML=`<div class="scbar"><b class="scstep">${esc(opts.step)}</b><span id="camHint">계근표가 화면에 꽉 차게 비춰 주세요</span>${opts.next?`<small class="scnext">${esc(opts.next)}</small>`:''}</div>
+      ov.innerHTML=`<div class="scbar"><div class="sctop"><b class="scstep">${esc(opts.step)}</b><button type="button" class="scauto" data-a="auto"></button></div><span id="camHint">계근표가 화면에 꽉 차게 비춰 주세요</span>${opts.next?`<small class="scnext">${esc(opts.next)}</small>`:''}</div>
         <div class="scstage"><video playsinline muted autoplay></video><svg class="scline"><polygon></polygon></svg><div class="camflash"></div></div>
         ${opts.skipLabel?`<button type="button" class="scskip" data-a="skip">${esc(opts.skipLabel)}</button>`:''}
         <div class="scfoot camfoot"><button type="button" data-a="cancel">${opts.cancelLabel||'취소'}</button><button type="button" data-a="shot" class="shutter" aria-label="찍기"><span></span></button><button type="button" data-a="pick">사진첩</button></div>`;
       document.body.appendChild(ov);
       const video=ov.querySelector('video'),stage=ov.querySelector('.scstage'),poly=ov.querySelector('polygon'),hint=ov.querySelector('#camHint'),shot=ov.querySelector('[data-a=shot]');
-      let stream=null,raf=0,quad=null,target=null,closed=false,lastDetect=0,lastFound=0;
+      let stream=null,raf=0,quad=null,target=null,closed=false,lastDetect=0,lastFound=0,gap=90,stableSince=0,prevT=null,shooting=false;
+      let auto=true;try{auto=localStorage.getItem(LS+'autoShot')!=='0'}catch(e){}
+      const armAt=performance.now()+(opts.autoDelay||1500); // 열자마자 바로 찍히지 않게
+      const autoBtn=ov.querySelector('[data-a=auto]');
+      const autoLabel=()=>{autoBtn.textContent=auto?'자동 촬영 켬':'자동 촬영 끔';autoBtn.setAttribute('aria-pressed',auto)};
+      autoLabel();
+      autoBtn.onclick=()=>{auto=!auto;try{localStorage.setItem(LS+'autoShot',auto?'1':'0')}catch(e){}stableSince=0;autoLabel()};
       const small=document.createElement('canvas');const sctx=small.getContext('2d',{willReadFrequently:true});
       const map=()=>{ // 영상 좌표 → 화면 좌표
         const r=stage.getBoundingClientRect(),vw=video.videoWidth,vh=video.videoHeight;
@@ -639,21 +860,33 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       ov.querySelector('[data-a=cancel]').onclick=()=>done(null);
       ov.querySelector('[data-a=pick]').onclick=()=>{done({pick:true});opts.onPick()};
       const sk=ov.querySelector('[data-a=skip]');if(sk)sk.onclick=()=>done({skip:true});
-      // 종이 찾기는 0.08초마다(작은 화면으로 빠르게), 노란 선은 매 화면마다 부드럽게 따라감
+      // 종이 찾기는 휴대폰 속도에 맞춰 자주, 노란 선은 매 화면마다 부드럽게 따라감
       const loop=ts=>{
         if(closed)return;
         raf=requestAnimationFrame(loop);
         if(!video.videoWidth)return;
-        if(ts-lastDetect>=80){
+        if(ts-lastDetect>=gap&&!shooting){
           lastDetect=ts;
-          const k=Math.min(1,240/Math.max(video.videoWidth,video.videoHeight));
+          const k=Math.min(1,320/Math.max(video.videoWidth,video.videoHeight));
           const w=Math.round(video.videoWidth*k),h=Math.round(video.videoHeight*k);
           if(small.width!==w||small.height!==h){small.width=w;small.height=h}
           sctx.drawImage(video,0,0,w,h);
-          const q=detectQuad(small);const nq=q.map(([x,y])=>[x/k,y/k]);nq.found=q.found;
+          const t0=performance.now();
+          const q=findPaper(small);
+          gap=Math.max(70,Math.min(300,(performance.now()-t0)*2.5)); // 느린 휴대폰은 덜 자주
+          const nq=q.map(([x,y])=>[x/k,y/k]);nq.found=q.found;
           if(nq.found){target=nq;lastFound=ts}
           else if(!target||ts-lastFound>600)target=nq; // 잠깐 놓쳐도 0.6초는 그대로
-          hint.textContent=target.found?'노란 선이 종이 테두리에 맞으면 셔터를 누르세요':'계근표가 화면에 꽉 차게 비춰 주세요';
+          // 흔들림 없이 가만히 있는지 (모서리 움직임이 화면의 1.2% 이내)
+          const lim=Math.max(video.videoWidth,video.videoHeight)*0.012;
+          const still=target.found&&prevT&&prevT.found&&target.every((p,i)=>Math.hypot(p[0]-prevT[i][0],p[1]-prevT[i][1])<lim);
+          if(still){if(!stableSince)stableSince=ts}else stableSince=0;
+          prevT=target;
+          if(!target.found)hint.textContent='계근표가 화면에 꽉 차게 비춰 주세요';
+          else if(auto&&stableSince)hint.textContent='그대로 계세요… 곧 찍어요';
+          else hint.textContent=auto?'노란 선이 종이에 맞게 비추고 잠깐 가만히 계세요':'노란 선이 종이 테두리에 맞으면 셔터를 누르세요';
+          poly.classList.toggle('ready',!!(auto&&stableSince));
+          if(auto&&stableSince&&ts>armAt&&ts-stableSince>900){shooting=true;shot.click()}
         }
         if(!target)return;
         if(!quad||quad.found!==target.found)quad=target.map(p=>p.slice());
@@ -662,13 +895,13 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         drawQuad();
       };
       shot.onclick=async()=>{
-        if(!video.videoWidth)return;
+        if(!video.videoWidth||shot.disabled)return;shooting=true;
         shot.disabled=true;ov.querySelector('.camflash').classList.add('on');
         const c=document.createElement('canvas');c.width=video.videoWidth;c.height=video.videoHeight;
         c.getContext('2d').drawImage(video,0,0);
         hint.textContent='스캔하는 중…';
         await new Promise(r=>setTimeout(r,30));
-        let out;try{out=warpScan(c,detectQuad(c))}catch(e){c._photo=c;out=c}
+        let out;try{out=warpScan(c,findPaper(c,1400))}catch(e){c._photo=c;out=c}
         done({canvas:out});
       };
       navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:2560},height:{ideal:1440}}})
@@ -722,7 +955,10 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     let lastVals=[],best=null,lastText='';
     for(const src of srcs){
       if(!src)continue;
-      const base=toCanvas(src,1600);
+      // 글자가 작으면 키워서 읽기 (가장 긴 쪽 1600px)
+      const sw=src.naturalWidth||src.width,sh=src.naturalHeight||src.height,ku=1600/Math.max(sw,sh);
+      const base=document.createElement('canvas');base.width=Math.round(sw*ku);base.height=Math.round(sh*ku);
+      {const bx=base.getContext('2d');bx.imageSmoothingQuality='high';bx.drawImage(src,0,0,base.width,base.height)}
       { // 흑백 + 대비 조금 올리기 (숫자가 더 잘 읽힘)
         const g=base.getContext('2d'),im=g.getImageData(0,0,base.width,base.height),d=im.data;
         for(let i=0;i<d.length;i+=4){let v=(d[i]*77+d[i+1]*150+d[i+2]*29)>>8;v=(v-128)*1.3+128;d[i]=d[i+1]=d[i+2]=v<0?0:v>255?255:v}
@@ -844,6 +1080,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         next:!last?`찍으면 바로 ${LABEL[steps[i+1]]} 계근표 차례예요`:'',
         skipLabel:t==='fUnload'&&two?'하차 계근표 없음 · 상차수량 인정':(t==='fLoad'&&two?'상차는 건너뛰고 하차 계근표 찍기':''),
         cancelLabel:i>0?'그만':'취소',
+        autoDelay:i>0?2500:1500, // 다음 계근표로 바꿔 들 시간
         onPick:()=>{pending={target:t,next:()=>step(i+1)};inp.value='';inp.click()}
       });
       if(!res)return;
