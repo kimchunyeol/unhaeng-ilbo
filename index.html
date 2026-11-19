@@ -882,11 +882,13 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
           const still=target.found&&prevT&&prevT.found&&target.every((p,i)=>Math.hypot(p[0]-prevT[i][0],p[1]-prevT[i][1])<lim);
           if(still){if(!stableSince)stableSince=ts}else stableSince=0;
           prevT=target;
+          const big=target.found&&quadArea(target)>=video.videoWidth*video.videoHeight*0.33;
           if(!target.found)hint.textContent='계근표가 화면에 꽉 차게 비춰 주세요';
+          else if(!big)hint.textContent='조금 더 가까이 대 주세요 (숫자가 작으면 못 읽어요)';
           else if(auto&&stableSince)hint.textContent='그대로 계세요… 곧 찍어요';
           else hint.textContent=auto?'노란 선이 종이에 맞게 비추고 잠깐 가만히 계세요':'노란 선이 종이 테두리에 맞으면 셔터를 누르세요';
-          poly.classList.toggle('ready',!!(auto&&stableSince));
-          if(auto&&stableSince&&ts>armAt&&ts-stableSince>900){shooting=true;shot.click()}
+          poly.classList.toggle('ready',!!(auto&&stableSince&&big));
+          if(auto&&big&&stableSince&&ts>armAt&&ts-stableSince>900){shooting=true;shot.click()}
         }
         if(!target)return;
         if(!quad||quad.found!==target.found)quad=target.map(p=>p.slice());
@@ -904,7 +906,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         let out;try{out=warpScan(c,findPaper(c,1400))}catch(e){c._photo=c;out=c}
         done({canvas:out});
       };
-      navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:2560},height:{ideal:1440}}})
+      navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:3840},height:{ideal:2160}}})
         .then(s=>{if(closed){s.getTracks().forEach(t=>t.stop());return}stream=s;video.srcObject=s;video.play().catch(()=>{});raf=requestAnimationFrame(loop)})
         .catch(()=>{hint.textContent='카메라를 쓸 수 없어요. 설정에서 카메라를 허용하거나 “사진첩”을 눌러 주세요.';shot.disabled=true});
       addEventListener('resize',drawQuad);
