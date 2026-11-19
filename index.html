@@ -146,6 +146,7 @@ p.scmsg{margin:0;font-size:14px;line-height:1.5;font-weight:600}
 .accept[aria-pressed="true"]{border-color:var(--accent);background:var(--chip)}
 .accept[aria-pressed="true"] .box{background:var(--accent);border-color:var(--accent)}
 .accept[aria-pressed="true"] .box::after{content:"";width:6px;height:11px;border:solid var(--paper);border-width:0 2.5px 2.5px 0;transform:translateY(-1px) rotate(45deg)}
+.guess{background:var(--warn)!important;border-color:#e0a800!important}
 .namenote{display:block;margin-top:4px;font-weight:500;color:var(--accent)}
 p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(--num);font-size:12px}
 .scansave{width:100%;border:0;background:var(--accent);color:var(--paper);border-radius:12px;padding:15px 12px;font-weight:700;font-size:16px;line-height:1.35}
@@ -1011,7 +1012,8 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     // 전화번호·홈페이지는 3점, 영어 단어는 1점(여러 회사에서 나온 단어는 안 셈). 3점 이상이어야 채움
     (toks||[]).forEach(t=>{const e=m[tkey(t)];if(!e)return;
       const isWord=t.startsWith('w:');if(isWord&&Object.keys(e).length>1)return;
-      const top=Object.entries(e).sort((a,b)=>b[1]-a[1])[0];if(!top)return;
+      const ent=Object.entries(e).sort((a,b)=>b[1]-a[1]),top=ent[0];if(!top)return;
+      const tot=ent.reduce((a,x)=>a+x[1],0);if(top[1]/tot<0.67)return; // 외부 계근소처럼 여러 곳에 쓰인 계근표는 건너뜀
       score[top[0]]=(score[top[0]]||0)+(isWord?1:3)});
     const best=Object.entries(score).sort((a,b)=>b[1]-a[1])[0];
     return best&&best[1]>=3?best[0]:null;
@@ -1023,6 +1025,24 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     if(db)db.doc('settings/tickets').set(ticketMap).catch(()=>{});else lsSet('tickets',ticketMap);
   }
   let scanToks={};
+  // 계근표로 못 알아본 이름 짐작하기: 상차지 = 지난번 상차지, 하차지 = 그 상차지에서 가장 자주 간 곳
+  function guessName(role){
+    const list=[...prevRows,...rows].filter(r=>r.d);
+    if(!list.length)return '';
+    if(role==='from'){for(let i=list.length-1;i>=0;i--){const v=baseName(list[i].from);if(v)return v}return ''}
+    const from=baseName($('fFrom')&&$('fFrom').value);
+    let pool=from?list.filter(r=>baseName(r.from)===from):[];
+    if(!pool.length)pool=list;
+    const cnt={},last={};
+    pool.forEach((r,i)=>{const v=baseName(r.to);if(!v)return;cnt[v]=(cnt[v]||0)+1;last[v]=i});
+    const best=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]||last[b]-last[a])[0];
+    return best||'';
+  }
+  function markGuess(el){
+    el.classList.add('guess');
+    const off=()=>{el.classList.remove('guess');el.removeEventListener('input',off)};
+    el.addEventListener('input',off);
+  }
 
   function wireScan(){
     scanToks={};scanBlobs={};const scanReady={};
@@ -1055,7 +1075,11 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
           const cur=baseName(nameEl.value);
           if(!cur){nameEl.value=known;nameNote=`${label}지는 전에 쓰던 이름 <b>${esc(known)}</b>(으)로 넣었어요.`}
           else if(cur!==known)nameNote=`이 계근표는 전에 <b>${esc(known)}</b>(으)로 적으셨어요.`;
-        }else if(nameEl&&scanToks[target].length)nameNote=`${label}지 이름을 적고 저장하면, 다음부터 이 회사 계근표는 이름이 저절로 들어가요.`;
+        }else if(nameEl&&!baseName(nameEl.value)){
+          const g=guessName(role);
+          if(g){nameEl.value=g;markGuess(nameEl);nameNote=`${label}지는 전에 적은 이름 <b>${esc(g)}</b>(으)로 넣었어요. 다르면 고쳐 주세요.`}
+          else if(scanToks[target].length)nameNote=`${label}지 이름을 적고 저장하면, 다음부터 이 회사 계근표는 이름이 저절로 들어가요.`;
+        }
         if(p.match&&p.match.guess){
           msg.style.color='var(--danger)';
           msg.innerHTML=`숫자를 확실히 읽지 못했어요. 아래에서 ${label}수량(실중량)을 골라 주세요.<small>읽은 숫자: ${p.values.map(v=>v.toFixed(2)).join(' · ')}</small>`;
@@ -1194,7 +1218,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     m.hidden=false;
     const close=()=>{m.hidden=true;m.innerHTML=''};
     $('cancel').onclick=close;
-    m.querySelectorAll('[data-fill]').forEach(b=>b.onclick=()=>{$(b.dataset.fill).value=b.dataset.v});
+    m.querySelectorAll('[data-fill]').forEach(b=>b.onclick=()=>{const el=$(b.dataset.fill);el.value=b.dataset.v;el.classList.remove('guess')});
     wireScan();
     const acc=$('fAccept');
     if(acc){
@@ -1210,7 +1234,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       $('fUnload').addEventListener('input',()=>{if(on()&&$('fUnload').value!==$('fLoad').value){acc.setAttribute('aria-pressed','false');const n=$('fNote');if(n.value.trim()==='상차수량')n.value=''}});
     }
     m.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>{
-      const [f,t]=b.dataset.route.split('|');$('fFrom').value=f;$('fTo').value=t;
+      const [f,t]=b.dataset.route.split('|');$('fFrom').value=f;$('fTo').value=t;$('fFrom').classList.remove('guess');$('fTo').classList.remove('guess');
       const l=$('fLoad');if(l){l.focus()}
     });
     if(editing){
