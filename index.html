@@ -1009,7 +1009,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   let scanToks={};
 
   function wireScan(){
-    scanToks={};scanBlobs={};
+    scanToks={};scanBlobs={};const scanReady={};
     const inp=$('scanFile');if(!inp)return;
     const steps=$('fLoad')?['fLoad','fUnload']:['fUnload'];
     const LABEL={fLoad:'상차',fUnload:'하차'};
@@ -1063,10 +1063,10 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         }
         if(nameNote){const sm=document.createElement('span');sm.className='namenote';sm.innerHTML=nameNote;msg.insertBefore(sm,msg.querySelector('small'))}
         // 사진첩에는 찍은 방향 그대로 저장 (글자 방향에 맞춰 돌리지 않음)
-        save.hidden=false;
+        scanReady[target]=true;refreshSave();
         chips.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{field.value=(+b.dataset.pick).toFixed(2);field.dispatchEvent(new Event('input'));toast(`${label}수량을 ${field.value}(으)로 바꿨어요`)});
       }catch(e){
-        save.hidden=false;
+        scanReady[target]=true;refreshSave();
         msg.style.color='var(--danger)';msg.textContent='읽기 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요. 스캔본은 사진첩에 저장할 수 있어요.';
       }
     };
@@ -1097,7 +1097,27 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       const {target,next}=pending;pending=null;
       run(target,()=>autoScan(f));next();
     };
-    document.querySelectorAll('.scansave').forEach(b=>b.onclick=async()=>{
+    // 상차·하차 스캔이 둘 다 있으면 버튼 하나로 2장 한꺼번에
+    const allBtn=$('scanSaveAll');
+    function refreshSave(){
+      const ready=steps.filter(t=>scanReady[t]&&scanBlobs[t]);
+      const both=ready.length===2;
+      steps.forEach(t=>{const b=document.querySelector(`.scansave[data-for="${t}"]`);if(b)b.hidden=both||!scanReady[t]});
+      allBtn.hidden=!both;
+      if(both&&!allBtn.classList.contains('done'))allBtn.innerHTML='📥 스캔본 2장 사진첩에 저장<small>누른 뒤 아래 공유창에서 “이미지 저장”을 누르면 두 장이 한꺼번에 들어가요</small>';
+    }
+    allBtn.onclick=async()=>{
+      const day=String(($('fD')&&$('fD').value)||'').padStart(2,'0'),base=`${ym.y}${String(ym.m).padStart(2,'0')}${day}`;
+      const files=steps.map(t=>new File([scanBlobs[t]],`계근표_${LABEL[t]}_${base}.jpg`,{type:'image/jpeg'}));
+      try{
+        if(navigator.canShare&&navigator.canShare({files})){
+          await navigator.share({files});
+          allBtn.classList.add('done');allBtn.innerHTML='✓ 스캔본 2장 보냈어요<small>“이미지 저장”을 눌렀으면 사진첩에 두 장 다 들어갔어요. 다시 저장하려면 누르세요</small>';
+          return}
+      }catch(e){if(e&&e.name==='AbortError'){toast('저장하지 않았어요. 공유창에서 “이미지 저장”을 눌러야 들어가요');return}}
+      files.forEach((f,i)=>setTimeout(()=>{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000)},i*400));
+    };
+    document.querySelectorAll('.scansave[data-for]').forEach(b=>b.onclick=async()=>{
       const target=b.dataset.for,f=scanBlobs[target];if(!f)return;
       const name=`계근표_${LABEL[target]}_${ym.y}${String(ym.m).padStart(2,'0')}${String(($('fD')&&$('fD').value)||'').padStart(2,'0')}.jpg`;
       const file=new File([f],name,{type:'image/jpeg'});
@@ -1145,6 +1165,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
             <div class="scaninfo"><p class="scmsg"></p><div class="chips"></div></div></div>
           <button type="button" class="scansave" data-for="${t}" hidden></button>
         </div>`).join('')}
+        <button type="button" class="scansave" id="scanSaveAll" hidden></button>
       </div>
       <div class="row">
         <button type="button" id="cancel">닫기</button>
