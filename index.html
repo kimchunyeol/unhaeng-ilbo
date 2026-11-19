@@ -508,8 +508,10 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       const tok=m[0],b=t[m.index-1]||'',a=t.slice(re.lastIndex,re.lastIndex+4);
       if(b===':'||a[0]===':'||b==='-'||a[0]==='-'||b==='('||a[0]===')')continue;
       const kg=/^\s*kg/i.test(a);let x;
-      if((x=tok.match(/^(\d{1,2})[,.](\d{3})$/)))add(sure,(+x[1]*1000+ +x[2])/1000);
+      // 17,320 / 17.320 / 17,320.0 (끝에 .0 이 붙는 양식) → 17.32톤
+      if((x=tok.match(/^(\d{1,2})[,.](\d{3})(?:[.,]\d{1,2})?$/)))add(sure,(+x[1]*1000+ +x[2])/1000);
       else if(/^\d{1,2}\.\d{1,2}$/.test(tok))add(sure,+tok);
+      else if((x=tok.match(/^(\d{4,5})[.,]\d$/))&&kg)add(sure,+x[1]/1000); // 17320.0 Kg
       else if(/^\d{4,5}$/.test(tok)){if(kg)add(sure,+tok/1000);else if(tok.length===5)add(maybe,+tok/1000);else add(maybe,+tok/100)}
     }
     const all=[...new Set([...sure,...maybe])].sort((p,q)=>q-p);
@@ -968,8 +970,15 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       }
       for(const deg of [0,270,90,180]){
         onStep&&onStep(deg);
-        const {data}=await w.recognize(rotated(base,deg));
-        const p=weighParse(data.text,getTare());
+        // 흩어진 글자 모드로 먼저, 못 찾으면 줄글 모드로 한 번 더 (양식마다 잘 읽히는 모드가 다름)
+        let data=null,p=null;
+        for(const mode of ['11','3']){
+          await w.setParameters({tessedit_pageseg_mode:mode});
+          const r=await w.recognize(rotated(base,deg));
+          const pp=weighParse(r.data.text,getTare());
+          if(!p||(pp.match&&(!p.match||pp.match.score>p.match.score))||(!p.match&&pp.values.length>p.values.length)){p=pp;data=r.data}
+          if(p.match&&p.match.score>=38)break;
+        }
         if(p.match&&(!best||p.match.score>best.match.score))best={...p,deg,src,text:data.text};
         if(best&&best.match.score>=38)return best; // 세 숫자 모두 확실 + 가장 큰 숫자가 총중량 + 공차가 맞음
         if(p.values.length>lastVals.length){lastVals=p.values;lastText=data.text}
