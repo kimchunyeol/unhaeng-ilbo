@@ -947,6 +947,42 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     })().catch(e=>{ocrLoading=null;throw e});
     return ocrLoading;
   }
+  // 한글 읽기 도구 (회사 이름용) — 필요할 때만 따로 받음
+  let korWorker=null,korLoading=null;
+  async function getKor(){
+    if(korWorker)return korWorker;
+    if(!korLoading)korLoading=(async()=>{
+      await getOcr();
+      const w=await Tesseract.createWorker('kor');
+      await w.setParameters({tessedit_pageseg_mode:'3'});
+      korWorker=w;return w;
+    })().catch(e=>{korLoading=null;throw e});
+    return korLoading;
+  }
+  const NAME_GENERIC=new Set(['공장','물류','지역','지원','산업','화학','케미칼','제강','금속','식품','원료','주식회사']);
+  const normName=t=>String(t||'').replace(/\(\s*주\s*\)|㈜|주식회사|\s+/g,'');
+  function lcsLen(a,b){let best=0;const prev=new Array(b.length+1).fill(0);
+    for(let i=1;i<=a.length;i++){let diag=0;for(let j=1;j<=b.length;j++){const t=prev[j];prev[j]=a[i-1]===b[j-1]?diag+1:0;if(prev[j]>best)best=prev[j];diag=t}}return best}
+  // 계근표에 적힌 글자에서, 소열님이 전에 쓴 이름 중 맞는 것 찾기
+  function matchTicketName(role,korText,engText){
+    const kt=normName(korText),et=' '+String(engText||'').toUpperCase()+' ';
+    const names=new Set();
+    [...prevRows,...rows].forEach(r=>{const v=baseName(r[role]);if(v&&!/[,·]/.test(v))names.add(v)});
+    Object.values(KNOWN_TICKETS[role]||{}).forEach(o=>Object.keys(o).forEach(n=>names.add(n)));
+    let best=null;
+    names.forEach(n=>{
+      const core=normName(n).replace(/[^가-힣]/g,'');let sc=0;
+      if(core.length>=2&&!NAME_GENERIC.has(core)){
+        const l=lcsLen(core,kt);
+        if(l>=Math.min(3,core.length)&&l>=core.length*0.6)sc=l+l/core.length;
+      }else if(!core){
+        const lat=n.toUpperCase().replace(/[^A-Z0-9]/g,'');
+        if(lat.length>=3&&new RegExp('[^A-Z0-9]'+lat+'[^A-Z0-9]').test(et))sc=lat.length+1;
+      }
+      if(sc&&(!best||sc>best.sc))best={n,sc};
+    });
+    return best&&best.n;
+  }
   function rotated(c,deg){
     if(!deg)return c;
     const r=document.createElement('canvas');const side=deg===180;
@@ -980,7 +1016,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
           if(!p||(pp.match&&(!p.match||pp.match.score>p.match.score))||(!p.match&&pp.values.length>p.values.length)){p=pp;data=r.data}
           if(p.match&&p.match.score>=38)break;
         }
-        if(p.match&&(!best||p.match.score>best.match.score))best={...p,deg,src,text:data.text};
+        if(p.match&&(!best||p.match.score>best.match.score))best={...p,deg,src,text:data.text,cv:rotated(base,deg)};
         if(best&&best.match.score>=38)return best; // 세 숫자 모두 확실 + 가장 큰 숫자가 총중량 + 공차가 맞음
         if(p.values.length>lastVals.length){lastVals=p.values;lastText=data.text}
       }
@@ -1071,7 +1107,15 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         scanToks[target]=ticketTokens(p.text);
         let nameNote='';
         const known=lookupName(role,scanToks[target]);
-        if(known&&nameEl){
+        let readName=null;
+        if(!known&&nameEl&&!baseName(nameEl.value)){
+          msg.innerHTML=`${label} 계근표에서 회사 이름 찾는 중…<small>처음 한 번은 한글 읽기 도구를 받느라 조금 걸려요</small>`;
+          try{const kw=await getKor();const r=await kw.recognize(p.cv||scanned._photo||scanned);readName=matchTicketName(role,r.data.text,p.text)}catch(e){}
+          if(!$(target))return;
+        }
+        if(readName&&!baseName(nameEl.value)){
+          nameEl.value=readName;markGuess(nameEl);nameNote=`${label}지는 계근표에서 읽은 이름 <b>${esc(readName)}</b>(으)로 넣었어요. 다르면 고쳐 주세요.`;
+        }else if(known&&nameEl){
           const cur=baseName(nameEl.value);
           if(!cur){nameEl.value=known;nameNote=`${label}지는 전에 쓰던 이름 <b>${esc(known)}</b>(으)로 넣었어요.`}
           else if(cur!==known)nameNote=`이 계근표는 전에 <b>${esc(known)}</b>(으)로 적으셨어요.`;
