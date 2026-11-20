@@ -112,7 +112,7 @@ input.num{font-family:var(--num)}
 .split{font-size:13px;color:var(--muted);background:var(--chip);border-radius:10px;padding:10px 12px;margin:0}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:999px;font-size:14px;font-weight:600;z-index:30}
 .seg{display:flex;background:var(--chip);border-radius:12px;padding:4px;gap:4px}
-.seg button{flex:1;border:0;background:none;border-radius:9px;padding:10px;font-weight:700;font-size:15px;color:var(--muted)}
+.seg button{flex:1;border:0;background:none;border-radius:9px;padding:10px 4px;font-weight:700;font-size:15px;color:var(--muted);white-space:nowrap}
 .seg button[aria-pressed="true"]{background:var(--paper);color:var(--ink);box-shadow:0 1px 3px rgba(20,30,60,.15)}
 .routes{display:flex;flex-direction:column;gap:6px}
 .routes span{font-size:13px;font-weight:600;color:var(--muted)}
@@ -146,7 +146,31 @@ p.scmsg{margin:0;font-size:14px;line-height:1.5;font-weight:600}
 .accept[aria-pressed="true"]{border-color:var(--accent);background:var(--chip)}
 .accept[aria-pressed="true"] .box{background:var(--accent);border-color:var(--accent)}
 .accept[aria-pressed="true"] .box::after{content:"";width:6px;height:11px;border:solid var(--paper);border-width:0 2.5px 2.5px 0;transform:translateY(-1px) rotate(45deg)}
-body.notlog #bakBox,body.notlog #sendBox{display:none!important}
+body.notlog #bakBox,body.notlog #sendBox,body.notlog .wrap>.tools,body.notlog #storeHint{display:none!important}
+.ggrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
+.ggrid label,.gamt{display:flex;flex-direction:column;gap:6px;font-weight:700;font-size:14px}
+.ggrid label small{font-weight:500;color:var(--muted);font-size:12px}
+.ggrid input,.gamt input{font:inherit;font-family:var(--num);font-size:18px;padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+.gout{background:var(--chip);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px;font-size:15px}
+.gout:empty{display:none}
+.gout .big{font-size:22px;font-weight:700}
+.gout .big b{font-family:var(--num);font-size:30px;color:var(--accent)}
+.gout b{font-family:var(--num)}
+.gout.small .big b{font-size:24px}
+.gout .warn{color:var(--danger);font-weight:600}
+.tank{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;height:46px}
+.tank:empty{display:none}
+.tank span{border:2px solid var(--navy);border-radius:8px;background:var(--paper);position:relative;overflow:hidden;display:grid;place-items:center;font-family:var(--num);font-size:12px;font-weight:600}
+.tank span i{position:absolute;left:0;right:0;bottom:0;background:var(--band);opacity:.55}
+.tank span em{position:relative;font-style:normal}
+.gpts{display:flex;flex-direction:column;gap:4px;font-size:14px}
+.gpts div{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 2px;border-bottom:1px solid var(--line);font-family:var(--num)}
+.gpts button{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:4px 10px;font-size:13px}
+#gaugeView details summary{cursor:pointer;font-weight:600;color:var(--accent);padding:4px 0}
+#gaugeView>.box+.box{margin-top:12px}
+#gaugeView button.primary,#gReset{border-radius:10px;padding:12px;font-weight:700;border:1px solid var(--line)}
+#gaugeView button.primary{background:var(--navy);color:var(--navy-ink);border-color:var(--navy)}
+#gReset{background:var(--paper);color:var(--muted)}
 .findlbl{display:flex;flex-direction:column;gap:6px;font-weight:700;font-size:14px}
 .findlbl input{font:inherit;font-size:16px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
 .fsum{display:flex;flex-direction:column;gap:4px;font-size:14px}
@@ -235,6 +259,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     <button id="tabLog" aria-pressed="true">운행일보</button>
     <button id="tabStat" aria-pressed="false">통계</button>
     <button id="tabFind" aria-pressed="false">찾기</button>
+    <button id="tabGauge" aria-pressed="false">하중</button>
   </div>
 
   <div id="sendBox" class="box bakbox" hidden>
@@ -262,6 +287,43 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       <div class="chips" id="findChips"></div>
     </div>
     <div id="findOut"></div>
+  </div>
+  <div id="gaugeView" hidden>
+    <div class="box">
+      <h3>나눠 내리기 계산</h3>
+      <div class="ggrid">
+        <label>지금 실린 짐 (톤)<input id="gLoad" class="num" inputmode="decimal" placeholder="23.04"></label>
+        <label>지금 계기판 (선택)<input id="gNow" class="num" inputmode="decimal" placeholder="26.3"></label>
+      </div>
+      <div class="seg" role="group" aria-label="계산 방법"><button type="button" data-gm="drop" aria-pressed="true">내릴 양</button><button type="button" data-gm="keep" aria-pressed="false">남길 양</button></div>
+      <label class="gamt"><span id="gAmtLbl">내릴 양 (톤)</span><input id="gAmt" class="num" inputmode="decimal" placeholder="4"></label>
+      <div class="chips" id="gKan"></div>
+      <div id="gOut" class="gout" aria-live="polite"></div>
+      <div class="tank" id="gTank" aria-hidden="true"></div>
+    </div>
+    <div class="box">
+      <h3>계기판 → 남은 짐</h3>
+      <label class="gamt">계기판 숫자 (멈춘 뒤)<input id="gRev" class="num" inputmode="decimal" placeholder="18.0"></label>
+      <div id="gRevOut" class="gout small"></div>
+      <details><summary>계기판 숫자별 표 보기</summary><table class="ytable gtable"><thead><tr><th>계기판</th><th>남은 짐</th><th>칸</th></tr></thead><tbody id="gTable"></tbody></table></details>
+    </div>
+    <div class="box">
+      <h3>계근 결과로 맞추기</h3>
+      <p class="hint" style="margin:0">계근표가 나오면 그때 계기판 숫자(펌핑 멈춘 뒤)와 실제 짐을 넣어 주세요. 쌓일수록 계산이 정확해져요.</p>
+      <div class="ggrid">
+        <label>계기판 (멈춘 뒤)<input id="gpG" class="num" inputmode="decimal" placeholder="23.7"></label>
+        <label>실제 짐 (톤)<input id="gpC" class="num" inputmode="decimal" placeholder="19.54"></label>
+      </div>
+      <button type="button" id="gpAdd" class="primary">맞추기에 넣기</button>
+      <div id="gPts" class="gpts"></div>
+      <div class="ggrid">
+        <label>내리는 중 계기판 차이 (톤)<input id="gPump" class="num" inputmode="decimal"></label>
+        <label>탱크 한 칸 (톤)<input id="gKanT" class="num" inputmode="decimal"></label>
+        <label>허가 상차중량 (톤)<input id="gMax" class="num" inputmode="decimal"></label>
+      </div>
+      <p class="hint" style="margin:0">펌핑하는 동안은 계기판이 실제보다 낮게 보여서, 그만큼 빼고 멈추게 알려 드려요. 탱크는 5칸이에요.</p>
+      <button type="button" id="gReset">처음 값으로 되돌리기</button>
+    </div>
   </div>
 
   <div id="logView" class="wrap" style="max-width:none">
@@ -328,7 +390,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     });
   }
   function saveVehicle(){
-    if(!db){lsSet('settings',{vehicle});return}
+    if(!db){const st=lsGet('settings')||{};st.vehicle=vehicle;lsSet('settings',st);return} // 다른 설정(백업·하중)은 그대로
     db.doc('settings/main').set({vehicle},{merge:true}).catch(()=>toast('차량번호를 저장하지 못했어요'));
   }
 
@@ -530,12 +592,98 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     $('tabLog').setAttribute('aria-pressed',v==='log');
     $('tabStat').setAttribute('aria-pressed',v==='stat');
     $('tabFind').setAttribute('aria-pressed',v==='find');
-    $('logView').hidden=v!=='log';$('statView').hidden=v!=='stat';$('findView').hidden=v!=='find';
+    $('tabGauge').setAttribute('aria-pressed',v==='gauge');
+    $('logView').hidden=v!=='log';$('statView').hidden=v!=='stat';$('findView').hidden=v!=='find';$('gaugeView').hidden=v!=='gauge';
     document.querySelector('.fab').hidden=v!=='log';
-    document.querySelector('.month').style.visibility=v==='find'||(v==='stat'&&statMode==='year')?'hidden':'';
+    document.querySelector('.month').style.visibility=v==='find'||v==='gauge'||(v==='stat'&&statMode==='year')?'hidden':'';
     if(v==='stat')renderStats();
     if(v==='find')openFind();
+    if(v==='gauge')openGauge();
   }
+
+  /* ---------- 하중: 계기판 숫자로 나눠 내리기 ---------- */
+  // 계기판은 3·4·5축만 잼 (1·2축 무게는 안 잡힘). 실제 잰 (계기판, 실제 짐) 점들을 이어서 계산
+  const GAUGE_DEF={pts:[[15.9,8.4],[23.7,19.54],[26.3,23.04]],pump:0.3,kan:4.6,max:21.8};
+  let gauge=JSON.parse(JSON.stringify(GAUGE_DEF)),gMode='drop';
+  function setGauge(g){if(g&&Array.isArray(g.pts)&&g.pts.length>=2)gauge={pts:g.pts,pump:g.pump??0.3,kan:g.kan??4.6,max:g.max??21.8};if(view==='gauge')drawGauge()}
+  function saveGauge(){
+    if(db)db.doc('settings/main').set({gauge},{merge:true}).catch(()=>toast('저장하지 못했어요'));
+    else{const st=lsGet('settings')||{};st.gauge=gauge;lsSet('settings',st)}
+  }
+  const gPts=()=>gauge.pts.slice().sort((a,b)=>a[0]-b[0]);
+  function interp(x,pts,xi,yi){ // 점들을 직선으로 잇고, 바깥은 가장 가까운 두 점의 기울기로 늘림
+    for(let i=0;i<pts.length-1;i++){const a=pts[i],b=pts[i+1];
+      if(x<=b[xi]||i===pts.length-2){if(b[xi]===a[xi])return a[yi];return a[yi]+(x-a[xi])*(b[yi]-a[yi])/(b[xi]-a[xi])}}
+    return pts[0][yi];
+  }
+  const cargoAt=g=>interp(g,gPts(),0,1);
+  const gaugeAt=c=>interp(c,gPts().slice().sort((a,b)=>a[1]-b[1]),1,0);
+  const kanTxt=t=>{const k=t/gauge.kan;return k<0.05?'0칸':`약 ${k>=0.95&&Math.abs(k-Math.round(k))<0.08?Math.round(k):k.toFixed(1)}칸`};
+  function drawTank(remain){
+    const cells=[];let left=Math.max(0,remain);
+    for(let i=0;i<5;i++){const f=Math.max(0,Math.min(1,left/gauge.kan));left-=gauge.kan;cells.push(f)}
+    $('gTank').innerHTML=cells.map((f,i)=>`<span><i style="height:${Math.round(f*100)}%"></i><em>${f>=0.999?'가득':f<=0.001?'빈 칸':Math.round(f*100)+'%'}</em></span>`).join('');
+  }
+  function lastLoad(){
+    const list=[...prevRows,...rows];
+    for(let i=list.length-1;i>=0;i--){const r=list[i];if(r.d&&r.load!=null)return r.load}
+    return null;
+  }
+  function openGauge(){
+    if(!$('gLoad').value){const l=lastLoad();if(l)$('gLoad').value=l.toFixed(2)}
+    $('gPump').value=gauge.pump;$('gKanT').value=gauge.kan;$('gMax').value=gauge.max;
+    drawGauge();
+  }
+  function drawGauge(){
+    const n=v=>toNum($(v).value);
+    const load=n('gLoad'),now=n('gNow'),amt=n('gAmt');
+    $('gKan').innerHTML=[1,2,3,4].map(k=>`<button type="button" data-kan="${k}">${k}칸 (${(k*gauge.kan).toFixed(1)}t)</button>`).join('');
+    $('gKan').querySelectorAll('[data-kan]').forEach(b=>b.onclick=()=>{
+      const t=+b.dataset.kan*gauge.kan;
+      $('gAmt').value=(gMode==='drop'?t:Math.max(0,t)).toFixed(1);drawGauge()});
+    const out=$('gOut');
+    const over=load!=null&&gauge.max&&load>gauge.max+0.005?`<span class="hint">허가 상차중량 ${gauge.max.toFixed(1)}톤보다 <b>${(load-gauge.max).toFixed(2)}</b>톤 더 실려 있어요.</span>`:'';
+    if(load==null||amt==null){out.innerHTML='<span class="hint">실린 짐과 '+(gMode==='drop'?'내릴':'남길')+' 양을 넣으면 계기판 몇에서 멈출지 알려 드려요.</span>'+over;drawTank(load||0)}
+    else{
+      const remain=gMode==='drop'?load-amt:amt,drop=load-remain;
+      if(remain<0||drop<0){out.innerHTML=`<span class="warn">${gMode==='drop'?'내릴 양이 실린 짐보다 많아요':'남길 양이 실린 짐보다 많아요'}</span>`;drawTank(load)}
+      else{
+        // 지금 계기판을 넣으면 그 숫자에서 줄어드는 만큼으로 계산 (차마다·날마다 차이를 줄임)
+        const shift=now!=null?now-gaugeAt(load):0;
+        const stop=gaugeAt(remain)+shift,during=stop-gauge.pump;
+        const lowNote=remain<3?'<span class="hint">짐이 아주 적게 남을 때는 계산이 덜 정확해요. 계근해서 확인해 주세요.</span>':'';
+        out.innerHTML=`<span class="big">계기판 <b>${stop.toFixed(1)}</b> 에서 멈추기</span>
+          <span>내리는 중에는 <b>${during.toFixed(1)}</b> 에서 끄세요 (계기판이 ${gauge.pump}톤 낮게 보여요)</span>
+          <span>내리는 짐 <b>${drop.toFixed(2)}</b>톤 (${kanTxt(drop)}) · 남는 짐 <b>${remain.toFixed(2)}</b>톤 (${kanTxt(remain)})</span>
+          ${over}${now!=null?`<span class="hint">지금 계기판 ${now.toFixed(1)}에서 ${(now-stop).toFixed(1)}만큼 줄면 돼요.</span>`:'<span class="hint">출발 전 계기판 숫자를 넣으면 더 정확해요.</span>'}${lowNote}`;
+        drawTank(remain);
+      }
+    }
+    const rv=n('gRev');
+    $('gRevOut').innerHTML=rv==null?'':(()=>{const c=cargoAt(rv);return c<0.3?'<span class="big">거의 빈 차</span>':`<span class="big">남은 짐 <b>${c.toFixed(1)}</b>톤</span><span>${kanTxt(c)}</span>`})();
+    const rowsT=[];for(let g=26.5;g>=9.99;g-=0.5){const c=cargoAt(g);rowsT.push(`<tr><td>${g.toFixed(1)}</td><td>${c<0.3?'거의 빈 차':c.toFixed(1)+'톤'}</td><td>${c<0.3?'-':(c/gauge.kan).toFixed(1)}</td></tr>`)}
+    $('gTable').innerHTML=rowsT.join('');
+    $('gPts').innerHTML=gPts().slice().reverse().map(p=>`<div><span>계기판 ${p[0].toFixed(1)} → 짐 ${p[1].toFixed(2)}톤</span>${gauge.pts.length>2?`<button type="button" data-del="${p[0]}|${p[1]}">지우기</button>`:''}</div>`).join('');
+    $('gPts').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{const [g,c]=b.dataset.del.split('|').map(Number);
+      gauge.pts=gauge.pts.filter(p=>!(p[0]===g&&p[1]===c));saveGauge();drawGauge();toast('지웠어요')});
+  }
+  ['gLoad','gNow','gAmt','gRev'].forEach(id=>$(id).addEventListener('input',drawGauge));
+  document.querySelectorAll('[data-gm]').forEach(b=>b.onclick=()=>{
+    gMode=b.dataset.gm;document.querySelectorAll('[data-gm]').forEach(x=>x.setAttribute('aria-pressed',x===b));
+    $('gAmtLbl').textContent=gMode==='drop'?'내릴 양 (톤)':'남길 양 (톤)';$('gAmt').value='';drawGauge()});
+  $('gpAdd').onclick=()=>{
+    const g=toNum($('gpG').value),c=toNum($('gpC').value);
+    if(g==null||c==null||g<5||g>40||c<0||c>30){toast('계기판과 실제 짐을 맞게 넣어 주세요');return}
+    gauge.pts=gauge.pts.filter(p=>Math.abs(p[0]-g)>=0.05); // 같은 계기판 숫자는 새 값으로
+    gauge.pts.push([g,c]);saveGauge();$('gpG').value='';$('gpC').value='';drawGauge();toast('넣었어요. 계산이 새 숫자로 바뀌었어요');
+  };
+  $('gPump').addEventListener('change',()=>{const v=toNum($('gPump').value);if(v!=null&&v>=0&&v<2){gauge.pump=v;saveGauge();drawGauge()}});
+  $('gKanT').addEventListener('change',()=>{const v=toNum($('gKanT').value);if(v!=null&&v>1&&v<10){gauge.kan=v;saveGauge();drawGauge()}});
+  $('gMax').addEventListener('change',()=>{const v=toNum($('gMax').value);if(v!=null&&v>5&&v<40){gauge.max=v;saveGauge();drawGauge()}});
+  $('gReset').onclick=()=>{
+    const b=$('gReset');if(!b.dataset.armed){b.dataset.armed='1';b.textContent='한 번 더 누르면 되돌려요';setTimeout(()=>{delete b.dataset.armed;b.textContent='처음 값으로 되돌리기'},3000);return}
+    delete b.dataset.armed;b.textContent='처음 값으로 되돌리기';
+    gauge=JSON.parse(JSON.stringify(GAUGE_DEF));saveGauge();openGauge();toast('처음 값으로 되돌렸어요')};
 
   /* ---------- 1년 통계 ---------- */
   let statMode='month',statYear=null,yearPick=null;
@@ -1844,6 +1992,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   $('tabLog').onclick=()=>setView('log');
   $('tabStat').onclick=()=>setView('stat');
   $('tabFind').onclick=()=>setView('find');
+  $('tabGauge').onclick=()=>setView('gauge');
   $('body').addEventListener('click',e=>{const tr=e.target.closest('tr[data-i]');if(tr)openForm('edit',+tr.dataset.i)});
   $('prev').onclick=()=>{ym.m--;if(ym.m<1){ym.m=12;ym.y--}openMonth()};
   $('next').onclick=()=>{ym.m++;if(ym.m>12){ym.m=1;ym.y++}openMonth()};
@@ -1859,7 +2008,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     const qs=await fs.collection(`users/${user.uid}/logs`).get();
     qs.forEach(d=>{all['logs/'+d.id]=d.data()});
     const st=await fs.doc(`users/${user.uid}/settings/main`).get();
-    if(st.exists)all.settings={vehicle:st.data().vehicle||''};
+    if(st.exists){all.settings={vehicle:st.data().vehicle||''};if(st.data().gauge)all.settings.gauge=st.data().gauge}
     const tk=await fs.doc(`users/${user.uid}/settings/tickets`).get();
     if(tk.exists)all.tickets=tk.data();
     return all;
@@ -1891,6 +2040,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         const j=JSON.parse(r.result);
         if(!j||j.app!=='unhaeng-ilbo'||!j.data)throw 0;
         if(j.data.settings&&j.data.settings.vehicle){vehicle=j.data.settings.vehicle;saveVehicle()}
+        if(j.data.settings&&j.data.settings.gauge){setGauge(j.data.settings.gauge);saveGauge()}
         if(j.data.tickets&&typeof j.data.tickets==='object'){ticketMap=j.data.tickets;if(db)db.doc('settings/tickets').set(ticketMap).catch(()=>{});else lsSet('tickets',ticketMap)}
         if(user){await writeCloud(Object.entries(j.data),false)}
         else Object.entries(j.data).forEach(([k,v])=>lsSet(k,v));
@@ -1943,6 +2093,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     $('store').textContent='이 기기에만 저장 중';
     const b=$('authBtn');b.hidden=!fs;b.className='authbtn';b.textContent='로그인 · 휴대폰·맥미니 맞추기';
     const st=lsGet('settings');if(st&&st.vehicle)vehicle=st.vehicle;
+    gauge=JSON.parse(JSON.stringify(GAUGE_DEF));if(st&&st.gauge)setGauge(st.gauge);
     openMonth();
     if(!vehicle)$('vehicleBtn').click();
     setTimeout(()=>checkMonthlySend().then(()=>checkMonthlyBackup()).catch(()=>{}),1500);
@@ -1977,7 +2128,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       else{const loc=lsGet('tickets');if(loc&&(Object.keys(loc.from||{}).length||Object.keys(loc.to||{}).length)){ticketMap=loc;fs.doc(base+'settings/tickets').set(loc).catch(()=>{})}}
     },()=>{});
     if(unsubVeh)unsubVeh();
-    unsubVeh=fs.doc(base+'settings/main').onSnapshot(s=>{if(s.exists&&s.data().vehicle){vehicle=s.data().vehicle;render()}},()=>{});
+    unsubVeh=fs.doc(base+'settings/main').onSnapshot(s=>{if(!s.exists)return;const d=s.data();if(d.gauge)setGauge(d.gauge);if(d.vehicle){vehicle=d.vehicle;render()}},()=>{});
     openMonth();
     if(!vehicle)$('vehicleBtn').click();
     setTimeout(()=>checkMonthlySend().then(()=>checkMonthlyBackup()).catch(()=>{}),1500);
