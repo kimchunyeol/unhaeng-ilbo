@@ -146,6 +146,36 @@ p.scmsg{margin:0;font-size:14px;line-height:1.5;font-weight:600}
 .accept[aria-pressed="true"]{border-color:var(--accent);background:var(--chip)}
 .accept[aria-pressed="true"] .box{background:var(--accent);border-color:var(--accent)}
 .accept[aria-pressed="true"] .box::after{content:"";width:6px;height:11px;border:solid var(--paper);border-width:0 2.5px 2.5px 0;transform:translateY(-1px) rotate(45deg)}
+body.notlog #bakBox,body.notlog #sendBox{display:none!important}
+.findlbl{display:flex;flex-direction:column;gap:6px;font-weight:700;font-size:14px}
+.findlbl input{font:inherit;font-size:16px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.fsum{display:flex;flex-direction:column;gap:4px;font-size:14px}
+.fsum b{font-family:var(--num)}
+.flist{display:flex;flex-direction:column}
+.flist button{all:unset;cursor:pointer;display:grid;grid-template-columns:6.6em 1fr auto;gap:8px;padding:9px 2px;border-bottom:1px solid var(--line);font-size:14px;align-items:center}
+.flist button:focus-visible{outline:2px solid var(--accent)}
+.flist .fd{font-family:var(--num);color:var(--muted);font-size:13px}
+.flist .fr{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flist .fq{font-family:var(--num);font-size:13px}
+mark{background:var(--warn);color:inherit;border-radius:3px;padding:0 1px}
+tbody tr.hl td{background:var(--warn)!important;transition:background 2s}
+.yhead{display:flex;align-items:center;justify-content:center;gap:10px}
+.yhead strong{font-size:17px;min-width:5em;text-align:center}
+.yhead button{border:1px solid var(--line);background:var(--paper);width:40px;height:40px;border-radius:10px;font-size:18px}
+.ychart{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;align-items:end;height:150px;padding-top:18px;border-bottom:1px solid var(--line);position:relative}
+.ychart button{all:unset;cursor:pointer;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;position:relative}
+.ychart .yb{background:var(--band);border-radius:4px 4px 0 0;min-height:2px}
+.ychart button[aria-pressed="true"] .yb{background:var(--accent)}
+.ychart button.empty .yb{background:var(--line)}
+.ychart .ytip{position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);font-family:var(--num);font-size:11px;white-space:nowrap;background:var(--ink);color:var(--paper);padding:2px 5px;border-radius:5px;display:none;z-index:2}
+.ychart button[aria-pressed="true"] .ytip{display:block}
+.ylabels{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;font-size:11px;color:var(--muted);text-align:center;font-family:var(--num)}
+.ytable{width:100%;border-collapse:collapse;font-size:13px;table-layout:auto;min-width:0}
+.ytable th,.ytable td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--num);font-variant-numeric:tabular-nums}
+.ytable th{background:none;color:var(--muted);border:0;border-bottom:1px solid var(--line);font-family:var(--font);font-size:12px}
+.ytable td:first-child,.ytable th:first-child{text-align:left}
+.ytable tr.sum td{font-weight:700;border-top:2px solid var(--ink)}
+.ytable tr.none td{color:var(--muted)}
 .monthwarn{display:block;margin-top:4px;color:var(--danger);font-weight:600}
   .guess{background:var(--warn)!important;border-color:#e0a800!important}
 .namenote{display:block;margin-top:4px;font-weight:500;color:var(--accent)}
@@ -202,7 +232,14 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
 
   <div class="seg" role="group" aria-label="보기">
     <button id="tabLog" aria-pressed="true">운행일보</button>
-    <button id="tabStat" aria-pressed="false">거래처 통계</button>
+    <button id="tabStat" aria-pressed="false">통계</button>
+    <button id="tabFind" aria-pressed="false">찾기</button>
+  </div>
+
+  <div id="sendBox" class="box bakbox" hidden>
+    <h3 id="sendTitle">지난달 운행일보 회사에 보냈나요?</h3>
+    <p class="hint">아래 버튼을 누르고 공유창에서 <b>카카오톡</b>을 고르면 PDF가 바로 가요.</p>
+    <div class="tools"><button id="sendDone">이미 보냈어요</button><button id="sendGo" class="primary">PDF 보내기</button></div>
   </div>
 
   <div id="bakBox" class="box bakbox" hidden>
@@ -218,6 +255,13 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   </div>
 
   <div id="statView" hidden></div>
+  <div id="findView" hidden>
+    <div class="box">
+      <label class="findlbl">거래처 이름으로 찾기<input id="findQ" type="search" placeholder="예: KCC대죽, 대아탱크" autocomplete="off" enterkeyhint="search"></label>
+      <div class="chips" id="findChips"></div>
+    </div>
+    <div id="findOut"></div>
+  </div>
 
   <div id="logView" class="wrap" style="max-width:none">
   <p class="hint">줄을 누르면 고칠 수 있어요. 두 곳에 나눠 내렸으면 그 줄을 누르고 <b>“이 운행에 하차지 추가”</b>를 누르세요. 합계 왼쪽 숫자는 일한 날수예요. 같은 날 여러 번 운행해도 하루로 세요.</p>
@@ -257,7 +301,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   let ym={y:now.getFullYear(),m:now.getMonth()+1};
   let vehicle='';
   let rows=[];           // 현재 달 기록
-  let db=null, unsubMonth=null;
+  let db=null, unsubMonth=null, monthReady=false;
   const LS='unhaeng-ilbo:';
 
   const $=id=>document.getElementById(id);
@@ -275,6 +319,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
 
   function saveMonth(){
     const body={year:ym.y,month:ym.m,rows:rows};
+    if(typeof allLogs==='object')allLogs[key()]=rows;
     if(!db){lsSet('logs/'+key(),body);return}
     // 신호가 없어도 기기에 먼저 기록되고, 연결되면 알아서 올라감 (앞 저장을 기다리지 않음)
     db.doc('logs/'+key()).set(body).catch(e=>{
@@ -300,11 +345,12 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
 
   function openMonth(){
     if(unsubMonth){unsubMonth();unsubMonth=null}
+    rows=[];monthReady=false; // 새 달 기록이 오기 전까지 지난 화면의 줄을 남기지 않음
     loadPrev();
     render();
-    if(!db){const b=lsGet('logs/'+key());rows=(b&&b.rows)||[];render();return}
+    if(!db){const b=lsGet('logs/'+key());rows=(b&&b.rows)||[];monthReady=true;render();return}
     unsubMonth=db.doc('logs/'+key()).onSnapshot(s=>{
-      const d=s.exists?s.data():null;
+      const d=s.exists?s.data():null;monthReady=true;
       rows=d&&Array.isArray(d.rows)?JSON.parse(JSON.stringify(d.rows)):[];
       render();
     },()=>{$('store').textContent='연결이 끊겼어요';});
@@ -375,6 +421,10 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     $('tFee').textContent=won(sum('fee'))||'0';
     if(view==='stat')renderStats();
     fitCells();
+    if(pendingHl&&pendingHl.k===key()&&rows.length){
+      const tr=document.querySelector(`#body tr[data-i="${pendingHl.i}"]`);pendingHl=null;
+      if(tr){tr.classList.add('hl');tr.scrollIntoView({block:'center'});setTimeout(()=>tr.classList.remove('hl'),2500)}
+    }
   }
 
   /* 칸보다 긴 글자는 한 줄에 들어가도록 글자만 작게 */
@@ -416,8 +466,9 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     return `<small class="${d>0?'up':''}">지난달보다 ${d>0?'▲':'▼'} ${t}</small>`;
   }
   function renderStats(){
+    if(statMode==='year'){renderYear();return}
     const c=summary(rows),p=summary(prevRows);
-    $('statView').innerHTML=`<div class="wrap" style="max-width:none">
+    $('statView').innerHTML=statSeg()+`<div class="wrap" style="max-width:none">
       <div class="tiles">
         <div class="tile"><span>운행</span><b>${c.n}회</b>${delta(c.n,p.n)}</div>
         <div class="tile"><span>상차 합계</span><b>${c.load.toFixed(1)}</b>${delta(c.load,p.load,1)}</div>
@@ -425,8 +476,9 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       </div>
       <div class="box"><h3>하차지별</h3>${bars(tally(rows,'to','unload'),'t')}</div>
       <div class="box"><h3>상차지별</h3>${bars(tally(rows.filter(r=>r.d),'from','load'),'t')}</div>
-      <p class="hint">나눠 내린 곳도 한 번씩 셉니다. 괄호 속 날짜는 빼고, 영어 대소문자가 달라도 같은 곳으로 묶어요. “울산유니드”와 “유니드울산”처럼 이름을 다르게 적으면 따로 세니까, 한 가지로 맞춰 적으면 더 정확해요.</p>
+      <p class="hint">위에서 <b>1년</b>을 누르면 한 해 동안 달마다 얼마나 일했는지 볼 수 있어요. 나눠 내린 곳도 한 번씩 셉니다. 괄호 속 날짜는 빼고, 영어 대소문자가 달라도 같은 곳으로 묶어요. “울산유니드”와 “유니드울산”처럼 이름을 다르게 적으면 따로 세니까, 한 가지로 맞춰 적으면 더 정확해요.</p>
     </div>`;
+    wireStatSeg();
   }
   function statData(rows,prevRows){
     const c=summary(rows),p=summary(prevRows);
@@ -473,12 +525,111 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   }
   function setView(v){
     view=v;
+    document.body.classList.toggle('notlog',v!=='log');
     $('tabLog').setAttribute('aria-pressed',v==='log');
     $('tabStat').setAttribute('aria-pressed',v==='stat');
-    $('logView').hidden=v!=='log';$('statView').hidden=v!=='stat';
+    $('tabFind').setAttribute('aria-pressed',v==='find');
+    $('logView').hidden=v!=='log';$('statView').hidden=v!=='stat';$('findView').hidden=v!=='find';
     document.querySelector('.fab').hidden=v!=='log';
+    document.querySelector('.month').style.visibility=v==='find'||(v==='stat'&&statMode==='year')?'hidden':'';
     if(v==='stat')renderStats();
+    if(v==='find')openFind();
   }
+
+  /* ---------- 1년 통계 ---------- */
+  let statMode='month',statYear=null,yearPick=null;
+  async function renderYear(){
+    const y=statYear||(statYear=ym.y);
+    const box=$('statView');
+    if(!box.querySelector('.yhead'))box.innerHTML=statSeg()+'<p class="hint">불러오는 중…</p>';
+    const logs=await loadAllLogs();
+    if(view!=='stat'||statMode!=='year')return;
+    const months=[];
+    for(let m=1;m<=12;m++){const list=logs[`${y}-${String(m).padStart(2,'0')}`]||[];const s=summary(list);
+      months.push({m,list,n:s.n,days:dayCount(list),load:s.load,unload:s.unload,fee:list.reduce((a,r)=>a+(Number(r.fee)||0),0)})}
+    const all=months.flatMap(x=>x.list),tot=summary(all),fee=months.reduce((a,x)=>a+x.fee,0);
+    const max=Math.max(1,...months.map(x=>x.unload));
+    const busiest=months.filter(x=>x.n).sort((a,b)=>b.unload-a.unload)[0];
+    const years=Object.keys(logs).map(k=>+k.slice(0,4));
+    const minY=Math.min(y,...years),maxY=Math.max(y,new Date().getFullYear(),...years);
+    box.innerHTML=statSeg()+`<div class="wrap" style="max-width:none">
+      <div class="yhead"><button id="yPrev" aria-label="이전 해" ${y<=minY?'disabled':''}>‹</button><strong>${y}년</strong><button id="yNext" aria-label="다음 해" ${y>=maxY?'disabled':''}>›</button></div>
+      <div class="tiles">
+        <div class="tile"><span>1년 운행</span><b>${tot.n}회</b><small>일한 날 ${months.reduce((a,x)=>a+x.days,0)}일</small></div>
+        <div class="tile"><span>상차 합계</span><b>${tot.load.toFixed(1)}</b><small>톤</small></div>
+        <div class="tile"><span>하차 합계</span><b>${tot.unload.toFixed(1)}</b><small>톤</small></div>
+      </div>
+      <div class="box"><h3>달마다 하차 톤수</h3>
+        <p class="hint" style="margin:0">막대를 누르면 숫자가 보여요.${busiest?` 가장 많이 실어 나른 달은 <b>${busiest.m}월</b>(${busiest.unload.toFixed(1)}톤)이에요.`:''}</p>
+        <div class="ychart" role="group" aria-label="${y}년 달마다 하차 톤수">${months.map(x=>`<button type="button" data-m="${x.m}" class="${x.n?'':'empty'}" aria-pressed="${yearPick===x.m}" aria-label="${x.m}월 하차 ${x.unload.toFixed(2)}톤, 운행 ${x.n}회"><span class="ytip">${x.m}월 ${x.unload.toFixed(1)}t · ${x.n}회</span><span class="yb" style="height:${x.unload/max*100}%"></span></button>`).join('')}</div>
+        <div class="ylabels">${months.map(x=>`<span>${x.m}</span>`).join('')}</div>
+      </div>
+      <div class="box"><h3>달마다 정리</h3>
+        <table class="ytable"><thead><tr><th>달</th><th>운행</th><th>상차</th><th>하차</th><th>계근비</th></tr></thead><tbody>
+        ${months.map(x=>`<tr class="${x.n?'':'none'}"><td>${x.m}월</td><td>${x.n||'-'}</td><td>${x.n?x.load.toFixed(2):'-'}</td><td>${x.n?x.unload.toFixed(2):'-'}</td><td>${x.fee?won(x.fee):'-'}</td></tr>`).join('')}
+        <tr class="sum"><td>합계</td><td>${tot.n}</td><td>${tot.load.toFixed(2)}</td><td>${tot.unload.toFixed(2)}</td><td>${fee?won(fee):'-'}</td></tr></tbody></table>
+      </div>
+      ${[['하차지',tally(all,'to','unload')],['상차지',tally(all.filter(r=>r.d),'from','load')]].map(([nm,t])=>`<div class="box"><h3>1년 ${nm}별${t.length>15?` <small style="font-weight:500;color:var(--muted)">많이 간 15곳 (모두 ${t.length}곳)</small>`:''}</h3>${bars(t.slice(0,15),'t')}</div>`).join('')}
+      <p class="hint">다른 곳은 <b>찾기</b>에서 이름으로 찾아보세요.</p>
+    </div>`;
+    wireStatSeg();
+    $('yPrev').onclick=()=>{statYear--;yearPick=null;renderYear()};
+    $('yNext').onclick=()=>{statYear++;yearPick=null;renderYear()};
+    box.querySelectorAll('.ychart [data-m]').forEach(b=>b.onclick=()=>{const m=+b.dataset.m;yearPick=yearPick===m?null:m;
+      box.querySelectorAll('.ychart [data-m]').forEach(x=>x.setAttribute('aria-pressed',+x.dataset.m===yearPick))});
+  }
+  function statSeg(){return `<div class="seg" role="group" aria-label="통계 기간" style="margin-bottom:12px"><button data-sm="month" aria-pressed="${statMode==='month'}">이번 달</button><button data-sm="year" aria-pressed="${statMode==='year'}">1년</button></div>`}
+  function wireStatSeg(){$('statView').querySelectorAll('[data-sm]').forEach(b=>b.onclick=()=>{statMode=b.dataset.sm;if(statMode==='year')statYear=ym.y;setView('stat')})}
+
+  /* ---------- 찾기: 모든 달에서 거래처 찾기 ---------- */
+  const normQ=t=>String(t||'').replace(/\s+/g,'').toUpperCase();
+  let findT=null,pendingHl=null;
+  async function openFind(){
+    $('findOut').innerHTML='<p class="hint">불러오는 중…</p>';
+    await loadAllLogs();
+    // 자주 간 곳 바로 누르기
+    const c={};Object.values(allLogs).forEach(list=>list.forEach(r=>{[r.d?r.from:'',r.to].forEach(v=>{v=baseName(v);if(v)c[v]=(c[v]||0)+1})}));
+    $('findChips').innerHTML=Object.keys(c).sort((a,b)=>c[b]-c[a]).slice(0,10).map(v=>`<button type="button" data-q="${esc(v)}">${esc(v)}</button>`).join('');
+    $('findChips').querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{$('findQ').value=b.dataset.q;runFind()});
+    runFind();
+  }
+  function runFind(){
+    const q=normQ($('findQ').value),out=$('findOut');
+    if(!q){out.innerHTML='<p class="hint">이름 일부만 넣어도 돼요. 예: “대죽”을 넣으면 KCC대죽이 나와요. 모든 달 기록에서 찾아요.</p>';return}
+    const hits=[];
+    Object.entries(allLogs).forEach(([k,list])=>{
+      let parent=null;
+      list.forEach((r,i)=>{
+        if(r.d)parent=r;
+        const from=r.d?r.from:(parent&&parent.from)||'';
+        const asFrom=r.d&&normQ(baseName(from)).includes(q),asTo=normQ(baseName(r.to)).includes(q);
+        if(asFrom||asTo)hits.push({k,i,y:+k.slice(0,4),m:+k.slice(5),d:r.d||(parent&&parent.d)||0,from,to:r.to||'',load:r.d?r.load:null,unload:r.unload,asFrom,asTo});
+      });
+    });
+    hits.sort((a,b)=>b.y-a.y||b.m-a.m||b.d-a.d||b.i-a.i);
+    if(!hits.length){out.innerHTML=`<div class="box"><p class="hint" style="margin:0">“${esc($('findQ').value.trim())}” 기록이 없어요.</p></div>`;return}
+    const nf=hits.filter(h=>h.asFrom).length,nt=hits.filter(h=>h.asTo).length,last=hits[0];
+    const tLoad=hits.filter(h=>h.asFrom).reduce((a,h)=>a+(Number(h.load)||0),0),tUn=hits.filter(h=>h.asTo).reduce((a,h)=>a+(Number(h.unload)||0),0);
+    const hl=t=>{const raw=String(t||'');const idx=normQ(raw).indexOf(q);if(idx<0)return esc(raw);
+      // 띄어쓰기 없는 이름이 대부분이라 그대로 표시
+      let pos=0,start=-1,end=-1,seen=0;for(;pos<raw.length;pos++){if(/\s/.test(raw[pos]))continue;if(seen===idx)start=pos;seen++;if(seen===idx+q.length){end=pos+1;break}}
+      return start<0||end<0?esc(raw):esc(raw.slice(0,start))+'<mark>'+esc(raw.slice(start,end))+'</mark>'+esc(raw.slice(end))};
+    const show=hits.slice(0,150);
+    out.innerHTML=`<div class="box"><div class="fsum">
+        <span>모두 <b>${hits.length}번</b> 다녀왔어요${nf&&nt?` (상차지로 ${nf}번 · 하차지로 ${nt}번)`:nf?' (상차지)':' (하차지)'}</span>
+        <span>마지막: <b>${last.y}년 ${last.m}월 ${last.d}일</b></span>
+        ${nf?`<span>상차 합계 <b>${tLoad.toFixed(2)}</b>톤</span>`:''}${nt?`<span>하차 합계 <b>${tUn.toFixed(2)}</b>톤</span>`:''}
+      </div></div>
+      <div class="box"><h3>기록 (최근 순 · 누르면 그 달로 가요)</h3><div class="flist">
+      ${show.map(h=>`<button type="button" data-k="${h.k}" data-i="${h.i}"><span class="fd">${String(h.y).slice(2)}.${h.m}.${h.d}</span><span class="fr">${hl(h.from)} → ${hl(h.to)}</span><span class="fq">${h.asFrom&&h.load!=null?f2(h.load):f2(h.unload)}</span></button>`).join('')}
+      </div>${hits.length>show.length?`<p class="hint">최근 ${show.length}개만 보여요.</p>`:''}</div>`;
+    out.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{
+      const k=b.dataset.k;pendingHl={k,i:+b.dataset.i};
+      ym={y:+k.slice(0,4),m:+k.slice(5)};setView('log');openMonth();
+    });
+  }
+  $('findQ').addEventListener('input',()=>{clearTimeout(findT);findT=setTimeout(runFind,200)});
+  $('findQ').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.target.blur();runFind()}});
 
   /* 자주 다니는 노선 (이번 달 + 지난달 기록에서 많이 다닌 순) */
   function frequentRoutes(){
@@ -1012,17 +1163,22 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     });
     return best&&best.n;
   }
-  // 지금까지 모든 달에 적은 상차지·하차지 이름 (몇 달 전에 간 곳도 알아보게)
-  let allNames={from:new Set(),to:new Set()};
-  async function refreshAllNames(){
-    const out={from:new Set(),to:new Set()};
-    const add=v=>{if(v&&Array.isArray(v.rows))v.rows.forEach(r=>{const a=baseName(r.from),b=baseName(r.to);if(a)out.from.add(a);if(b)out.to.add(b)})};
+  // 모든 달 기록 (찾기 · 1년 통계 · 계근표 이름 맞추기에 씀)
+  let allNames={from:new Set(),to:new Set()},allLogs={};
+  async function loadAllLogs(){
+    const out={};
     try{
-      if(user&&fs){(await fs.collection(`users/${user.uid}/logs`).get()).forEach(d=>add(d.data()))}
-      else Object.entries(localAll()).forEach(([k,v])=>{if(k.startsWith('logs/'))add(v)});
-      allNames=out;
-    }catch(e){}
+      if(user&&fs){(await fs.collection(`users/${user.uid}/logs`).get()).forEach(d=>{const v=d.data();if(v&&Array.isArray(v.rows))out[d.id]=v.rows})}
+      else Object.entries(localAll()).forEach(([k,v])=>{if(k.startsWith('logs/')&&v&&Array.isArray(v.rows))out[k.slice(5)]=v.rows});
+    }catch(e){return allLogs}
+    out[key()]=rows; // 지금 보는 달은 화면에 있는 최신 기록으로
+    allLogs=out;
+    const n={from:new Set(),to:new Set()};
+    Object.values(out).forEach(list=>list.forEach(r=>{const a=baseName(r.from),b=baseName(r.to);if(a)n.from.add(a);if(b)n.to.add(b)}));
+    allNames=n;
+    return out;
   }
+  const refreshAllNames=()=>loadAllLogs();
   function rotated(c,deg){
     if(!deg)return c;
     const r=document.createElement('canvas');const side=deg===180;
@@ -1260,6 +1416,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   }
 
   function openForm(mode,idx){
+    if(!monthReady){toast('기록을 불러오는 중이에요. 잠깐 뒤에 다시 눌러 주세요');return}
     const editing=mode==='edit'?rows[idx]:null;
     // 폼을 연 사이 다른 기기(맥미니)에서 기록이 바뀌어도 엉뚱한 줄을 고치지 않게, 연 줄을 다시 찾음
     const sig=mode==='new'?null:JSON.stringify(rows[idx]);
@@ -1501,6 +1658,43 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     if(db)db.doc('settings/main').set({lastBackup:k},{merge:true}).catch(()=>{});
     else{const st=lsGet('settings')||{};st.lastBackup=k;lsSet('settings',st)}
   }
+  /* ---------- 매달 초: 지난달 운행일보 회사에 보냈는지 ---------- */
+  let sendFile=null,sendKey='';
+  async function getSentDone(){
+    if(db){try{const s=await db.doc('settings/main').get();return s.exists?(s.data().lastSent||''):''}catch(e){return null}}
+    return (lsGet('settings')||{}).lastSent||'';
+  }
+  function setSentDone(k){
+    if(db)db.doc('settings/main').set({lastSent:k},{merge:true}).catch(()=>{});
+    else{const st=lsGet('settings')||{};st.lastSent=k;lsSet('settings',st)}
+  }
+  async function checkMonthlySend(){
+    const t=new Date();let y=t.getFullYear(),m=t.getMonth();if(m<1){m=12;y--}
+    const k=`${y}-${String(m).padStart(2,'0')}`;
+    const done=await getSentDone();
+    if(done===null||done>=k){$('sendBox').hidden=true;return}
+    if(!(await getMonthRows(k)).length){$('sendBox').hidden=true;return}
+    sendKey=k;
+    $('sendTitle').textContent=`${m}월 운행일보 회사에 보냈나요?`;
+    $('sendBox').hidden=false;
+    const go=$('sendGo');go.disabled=true;go.textContent='PDF 만드는 중…';
+    try{sendFile=await makeMonthPdf(y,m);go.disabled=!sendFile;go.textContent='PDF 보내기'}
+    catch(e){sendFile=null;go.disabled=false;go.textContent='다시 만들기'}
+  }
+  $('sendDone').onclick=()=>{setSentDone(sendKey);$('sendBox').hidden=true;toast('알겠어요. 다음 달 초에 다시 물어볼게요')};
+  $('sendGo').onclick=()=>{
+    if(!sendFile){checkMonthlySend();return}
+    const file=sendFile;
+    const finish=()=>{setSentDone(sendKey);$('sendBox').hidden=true;toast('보냈어요. 수고하셨어요')};
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      navigator.share({files:[file],title:file.name}).then(finish,e=>{if(e&&e.name==='AbortError')toast('안 보냈어요. 공유창에서 카카오톡을 골라 주세요');else toast('공유창을 열지 못했어요. 다시 눌러 주세요')});
+      return;
+    }
+    // 컴퓨터: 내려받기 폴더로 (카톡 PC에 끌어다 놓으면 돼요)
+    const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
+    setSentDone(sendKey);$('sendBox').hidden=true;toast('PDF를 내려받았어요. 카톡으로 보내 주세요');
+  };
+
   let bakFiles=null,bakKey='',bakSnooze=false;
   async function checkMonthlyBackup(){
     if(bakSnooze)return;
@@ -1583,6 +1777,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   $('addBtn').onclick=()=>openForm('new');
   $('tabLog').onclick=()=>setView('log');
   $('tabStat').onclick=()=>setView('stat');
+  $('tabFind').onclick=()=>setView('find');
   $('body').addEventListener('click',e=>{const tr=e.target.closest('tr[data-i]');if(tr)openForm('edit',+tr.dataset.i)});
   $('prev').onclick=()=>{ym.m--;if(ym.m<1){ym.m=12;ym.y--}openMonth()};
   $('next').onclick=()=>{ym.m++;if(ym.m>12){ym.m=1;ym.y++}openMonth()};
@@ -1684,7 +1879,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     const st=lsGet('settings');if(st&&st.vehicle)vehicle=st.vehicle;
     openMonth();
     if(!vehicle)$('vehicleBtn').click();
-    setTimeout(()=>checkMonthlyBackup().catch(()=>{}),1500);
+    setTimeout(()=>checkMonthlySend().then(()=>checkMonthlyBackup()).catch(()=>{}),1500);
     setTimeout(refreshAllNames,2500);
   }
   async function useCloud(u){
@@ -1719,7 +1914,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     unsubVeh=fs.doc(base+'settings/main').onSnapshot(s=>{if(s.exists&&s.data().vehicle){vehicle=s.data().vehicle;render()}},()=>{});
     openMonth();
     if(!vehicle)$('vehicleBtn').click();
-    setTimeout(()=>checkMonthlyBackup().catch(()=>{}),1500);
+    setTimeout(()=>checkMonthlySend().then(()=>checkMonthlyBackup()).catch(()=>{}),1500);
     setTimeout(refreshAllNames,2500);
   }
   const AUTH_MSG={
@@ -1791,7 +1986,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     const wasOnThisMonth=ym.y===thisMonth.y&&ym.m===thisMonth.m;
     thisMonth=cur;
     if(wasOnThisMonth&&$('modal').hidden){ym={...cur};openMonth();toast(`${cur.m}월이 시작됐어요. ${cur.m}월 운행일보로 넘겼어요`)}
-    bakSnooze=false;checkMonthlyBackup().catch(()=>{});
+    bakSnooze=false;checkMonthlySend().then(()=>checkMonthlyBackup()).catch(()=>{});
   });
 
   /* ---------- 신호 없을 때도 열리게: 앱과 도구를 기기에 보관 ---------- */
