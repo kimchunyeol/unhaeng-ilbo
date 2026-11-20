@@ -146,7 +146,8 @@ p.scmsg{margin:0;font-size:14px;line-height:1.5;font-weight:600}
 .accept[aria-pressed="true"]{border-color:var(--accent);background:var(--chip)}
 .accept[aria-pressed="true"] .box{background:var(--accent);border-color:var(--accent)}
 .accept[aria-pressed="true"] .box::after{content:"";width:6px;height:11px;border:solid var(--paper);border-width:0 2.5px 2.5px 0;transform:translateY(-1px) rotate(45deg)}
-.guess{background:var(--warn)!important;border-color:#e0a800!important}
+.monthwarn{display:block;margin-top:4px;color:var(--danger);font-weight:600}
+  .guess{background:var(--warn)!important;border-color:#e0a800!important}
 .namenote{display:block;margin-top:4px;font-weight:500;color:var(--accent)}
 p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(--num);font-size:12px}
 .scansave{width:100%;border:0;background:var(--accent);color:var(--paper);border-radius:12px;padding:15px 12px;font-weight:700;font-size:16px;line-height:1.35}
@@ -427,7 +428,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       <p class="hint">나눠 내린 곳도 한 번씩 셉니다. 괄호 속 날짜는 빼고, 영어 대소문자가 달라도 같은 곳으로 묶어요. “울산유니드”와 “유니드울산”처럼 이름을 다르게 적으면 따로 세니까, 한 가지로 맞춰 적으면 더 정확해요.</p>
     </div>`;
   }
-  function statData(){
+  function statData(rows,prevRows){
     const c=summary(rows),p=summary(prevRows);
     const out=[['구분','이번 달','지난달'],
       ['운행 횟수',c.n,prevRows.length?p.n:''],
@@ -439,20 +440,21 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     tally(rows.filter(r=>r.d),'from','load').forEach(([k,v])=>out.push([k,v.n,v.t.toFixed(2)]));
     return out;
   }
-  async function drawStats(){
+  async function drawStats(o){
+    o=o||{y:ym.y,m:ym.m,rows,prev:prevRows};
     const W=1240,H=1754,M=90;
     const cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d');
     const FONT='"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif';
     try{await document.fonts.load('700 20px "IBM Plex Sans KR"')}catch(e){}
     g.fillStyle='#fff';g.fillRect(0,0,W,H);
     const cw=W-2*M,cols=[0.46,0.22,0.32].map(p=>p*cw);
-    const d=statData();const blocks=[];let cur=[];
+    const d=statData(o.rows,o.prev);const blocks=[];let cur=[];
     d.forEach(r=>{if(!r.length){blocks.push(cur);cur=[]}else cur.push(r)});blocks.push(cur);
     const lines=blocks.reduce((a,b)=>a+b.length,0);
     const rh=Math.min(48,Math.floor((H-2*M-80-blocks.length*30)/lines));const fs=Math.round(Math.min(22,rh*.46));
     let y=M;
     g.fillStyle='#1f3864';g.fillRect(M,y,cw,70);g.fillStyle='#fff';g.font=`700 30px ${FONT}`;g.textAlign='center';g.textBaseline='middle';
-    g.fillText(`${vehicle} ${String(ym.y).slice(2)}년 ${ym.m}월 거래처 통계`,W/2,y+36);y+=70+20;
+    g.fillText(`${vehicle} ${String(o.y).slice(2)}년 ${o.m}월 거래처 통계`,W/2,y+36);y+=70+20;
     blocks.forEach(b=>{
       b.forEach((r,ri)=>{
         let x=M;
@@ -924,7 +926,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     let at=t.indexOf(String(y));
     while(at!==-1){
       const groups=(t.slice(at+4,at+30).match(/\d+/g)||[]).slice(0,4);
-      const mi=groups.findIndex(g=>g.length<=3&&g.includes(String(mo)));
+      const mi=groups.findIndex(g=>g===String(mo)||g==='0'+mo||(g.length===3&&g.includes(String(mo).padStart(2,'0'))));
       if(mi!==-1&&groups[mi+1]){
         const g=groups[mi+1];
         const cands=new Set([g,g.slice(0,-1),g.slice(1)].filter(c=>c.length>=1&&c.length<=2&&+c>=1&&+c<=days).map(Number));
@@ -933,11 +935,36 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       }
       at=t.indexOf(String(y),at+4);
     }
+    // 연도 줄을 못 읽었을 때: "11-19 14:36" 처럼 월-일 뒤에 시각이 붙은 것
+    const md=monthDayTimes(t).filter(x=>x.m===mo&&x.d<=days).map(x=>x.d);
+    if(md.length&&md.every(d=>d===md[0]))return md[0];
     return null;
+  }
+  function monthDayTimes(t){
+    const out=[],re=/(?:^|[^\d])(\d{1,2})[-.\/](\d{1,2})\s+\d{1,2}:\d{2}/g;let x;
+    while((x=re.exec(t))){const m=+x[1],d=+x[2];if(m>=1&&m<=12&&d>=1&&d<=31)out.push({m,d})}
+    return out;
+  }
+  // 지금 보는 달이 아닌 계근표인지: 가까운 달들 중 날짜가 읽히는 달 찾기
+  function ticketOtherMonth(text,y,m){
+    const t=new Date(),c=[];
+    const push=(yy,mm)=>{if(mm<1){mm+=12;yy--}if(mm>12){mm-=12;yy++}if(!(yy===y&&mm===m)&&!c.some(x=>x.y===yy&&x.m===mm))c.push({y:yy,m:mm})};
+    push(t.getFullYear(),t.getMonth()+1);push(t.getFullYear(),t.getMonth());push(y,m-1);push(y,m+1);
+    return c.find(x=>ticketDay(text,x.y,x.m))||null;
   }
   let ocrWorker=null,ocrLoading=null;
   function loadScript(src){return new Promise((ok,no)=>{const e=document.createElement('script');e.src=src;e.onload=ok;e.onerror=no;document.head.appendChild(e)})}
+  // 읽기 도구는 휴대폰 메모리를 많이 써서, 3분 동안 안 쓰면 내려놓음 (다음엔 기기에 보관된 걸로 금방 다시 켜짐)
+  let ocrIdleT=null;
+  function ocrTouch(){
+    clearTimeout(ocrIdleT);
+    ocrIdleT=setTimeout(()=>{
+      const a=ocrWorker,b=korWorker;ocrWorker=korWorker=null;ocrLoading=korLoading=null;
+      [a,b].forEach(w=>{if(w)w.terminate().catch(()=>{})});
+    },180000);
+  }
   async function getOcr(){
+    ocrTouch();
     if(ocrWorker)return ocrWorker;
     if(!ocrLoading)ocrLoading=(async()=>{
       if(!window.Tesseract)await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js');
@@ -950,6 +977,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   // 한글 읽기 도구 (회사 이름용) — 필요할 때만 따로 받음
   let korWorker=null,korLoading=null;
   async function getKor(){
+    ocrTouch();
     if(korWorker)return korWorker;
     if(!korLoading)korLoading=(async()=>{
       await getOcr();
@@ -968,6 +996,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     const kt=normName(korText),et=' '+String(engText||'').toUpperCase()+' ';
     const names=new Set();
     [...prevRows,...rows].forEach(r=>{const v=baseName(r[role]);if(v&&!/[,·]/.test(v))names.add(v)});
+    (allNames[role]||[]).forEach(v=>{if(!/[,·]/.test(v))names.add(v)});
     Object.values(KNOWN_TICKETS[role]||{}).forEach(o=>Object.keys(o).forEach(n=>names.add(n)));
     let best=null;
     names.forEach(n=>{
@@ -982,6 +1011,17 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       if(sc&&(!best||sc>best.sc))best={n,sc};
     });
     return best&&best.n;
+  }
+  // 지금까지 모든 달에 적은 상차지·하차지 이름 (몇 달 전에 간 곳도 알아보게)
+  let allNames={from:new Set(),to:new Set()};
+  async function refreshAllNames(){
+    const out={from:new Set(),to:new Set()};
+    const add=v=>{if(v&&Array.isArray(v.rows))v.rows.forEach(r=>{const a=baseName(r.from),b=baseName(r.to);if(a)out.from.add(a);if(b)out.to.add(b)})};
+    try{
+      if(user&&fs){(await fs.collection(`users/${user.uid}/logs`).get()).forEach(d=>add(d.data()))}
+      else Object.entries(localAll()).forEach(([k,v])=>{if(k.startsWith('logs/'))add(v)});
+      allNames=out;
+    }catch(e){}
   }
   function rotated(c,deg){
     if(!deg)return c;
@@ -1133,8 +1173,12 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
           field.value=p.match.net.toFixed(2);field.dispatchEvent(new Event('input'));
           let dayNote='';
           if(target==='fLoad'&&$('fD')){
-            const day=ticketDay(p.text||'',ym.y,ym.m);
-            if(day){$('fD').value=day;dayNote=` 날짜는 계근표에 적힌 <b>${day}일</b>로 넣었어요.`}
+            const day=ticketDay(p.text||'',ym.y,ym.m),tm=day?null:ticketOtherMonth(p.text||'',ym.y,ym.m);
+            if(tm){
+              dayNote=` <span class="monthwarn">이 계근표는 <b>${tm.y!==ym.y?tm.y+'년 ':''}${tm.m}월</b> 것인데, 지금 <b>${ym.m}월</b> 운행일보를 보고 있어요. 닫고 위의 ‹ › 버튼으로 ${tm.m}월로 가서 적어 주세요.</span>`;
+            }else{
+              if(day){$('fD').value=day;dayNote=` 날짜는 계근표에 적힌 <b>${day}일</b>로 넣었어요.`}
+            }
           }
           setTare(p.match.tare);
           msg.innerHTML=`${label}수량에 <b>${p.match.net.toFixed(2)}</b>을 넣었어요.${dayNote} 맞는지 확인해 주세요.<small>총 ${p.match.gross.toFixed(2)} − 공차 ${p.match.tare.toFixed(2)} = 실 ${p.match.net.toFixed(2)}</small>`;
@@ -1217,8 +1261,13 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
 
   function openForm(mode,idx){
     const editing=mode==='edit'?rows[idx]:null;
+    // 폼을 연 사이 다른 기기(맥미니)에서 기록이 바뀌어도 엉뚱한 줄을 고치지 않게, 연 줄을 다시 찾음
+    const sig=mode==='new'?null:JSON.stringify(rows[idx]);
+    const findIdx=()=>{if(!sig)return idx;if(rows[idx]&&JSON.stringify(rows[idx])===sig)return idx;return rows.findIndex(r=>JSON.stringify(r)===sig)};
+    const lost=()=>toast('그사이 다른 기기에서 이 줄이 바뀌었어요. 닫고 다시 열어 주세요');
     const isSplit=mode==='split'||(editing&&!editing.d);
     const lastD=rows.reduce((a,r)=>r.d?Math.max(a,r.d):a,0);
+    const now=new Date(); // 앱을 며칠 켜 둬도 오늘 날짜로
     const today=(now.getFullYear()===ym.y&&now.getMonth()+1===ym.m)?now.getDate():(lastD||1);
     const r=editing||{d:isSplit?null:today,from:'',to:'',load:null,unload:null,fee:null,note:''};
     const days=new Date(ym.y,ym.m,0).getDate();
@@ -1287,10 +1336,11 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         if(!del.classList.contains('armed')){
           const subs=(()=>{let e=idx+1;if(rows[idx].d)while(e<rows.length&&!rows[e].d)e++;return e-idx-1})();
           del.classList.add('armed');del.textContent=subs?`한 번 더 누르면 삭제 (하차지 ${subs}곳 포함)`:'한 번 더 누르면 삭제';return}
-        let end=idx+1;
-        if(rows[idx].d)while(end<rows.length&&!rows[end].d)end++; // 딸린 하차지 줄
-        const extra=end-idx-1;
-        rows.splice(idx,end-idx);saveMonth();render();close();toast(extra?`삭제했어요. 딸린 하차지 ${extra}곳도 같이 지웠어요`:'삭제했어요');
+        const at=findIdx();if(at<0){lost();return}
+        let end=at+1;
+        if(rows[at].d)while(end<rows.length&&!rows[end].d)end++; // 딸린 하차지 줄
+        const extra=end-at-1;
+        rows.splice(at,end-at);saveMonth();render();close();toast(extra?`삭제했어요. 딸린 하차지 ${extra}곳도 같이 지웠어요`:'삭제했어요');
       };
       const sp=$('addSplit');
       if(sp)sp.onclick=()=>{close();openForm('split',idx)};
@@ -1308,14 +1358,15 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         note:val('fNote')
       };
       if(!isSplit&&n.unload==null&&n.load!=null&&mode==='new')n.unload=n.load;
+      const at0=findIdx();if(at0<0){lost();return}
       if(mode==='edit'){
-        rows[idx]=n;
+        rows[at0]=n;
         if(!isSplit&&editing.d!==n.d){ // 날짜가 바뀌면 딸린 하차지와 함께 자리 옮김
-          let end=idx+1;while(end<rows.length&&!rows[end].d)end++;
-          const grp=rows.splice(idx,end-idx);insertGroup(grp);
+          let end=at0+1;while(end<rows.length&&!rows[end].d)end++;
+          const grp=rows.splice(at0,end-at0);insertGroup(grp);
         }
       }else if(mode==='split'){
-        let at=idx+1;while(at<rows.length&&!rows[at].d)at++;
+        let at=at0+1;while(at<rows.length&&!rows[at].d)at++;
         rows.splice(at,0,n);
       }else insertGroup([n]);
       learnName('from',scanToks.fLoad,n.from);learnName('to',scanToks.fUnload,n.to);
@@ -1332,7 +1383,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   }
 
   /* ---------- 내보내기 ---------- */
-  function tableData(){
+  function tableData(rows){
     const head=['날짜','상차지','하차지','상차수량','하차수량','계근비'];
     const body=rows.map(r=>[r.d??'',r.from||'',r.to||'',f2(r.load),f2(r.unload),r.fee!=null?won(r.fee):(r.note||'')]);
     const sum=k=>rows.reduce((a,r)=>a+(Number(r[k])||0),0);
@@ -1380,14 +1431,15 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
 
 
   /* ---------- PDF: A4 한 장에 엑셀 모양 그대로 그리기 ---------- */
-  async function drawSheet(){
+  async function drawSheet(o){
+    o=o||{y:ym.y,m:ym.m,rows,prev:prevRows};
     const W=1240,H=1754,M=70;               // A4 150dpi
     const cv=document.createElement('canvas');cv.width=W;cv.height=H;
     const g=cv.getContext('2d');
     const FONT='"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif';
     try{await document.fonts.load('700 20px "IBM Plex Sans KR"');await document.fonts.load('600 20px "IBM Plex Sans KR"')}catch(e){}
     g.fillStyle='#fff';g.fillRect(0,0,W,H);
-    const data=tableData();const body=data.slice(1,-1);const foot=data[data.length-1];
+    const data=tableData(o.rows);const body=data.slice(1,-1);const foot=data[data.length-1];
     const cols=[0.09,0.19,0.24,0.16,0.16,0.16].map(p=>p*(W-2*M));
     const titleH=70,headH=54,footGap=24;
     const rowH=Math.min(50,Math.floor((H-2*M-titleH-headH-footGap-50)/Math.max(body.length,1)));
@@ -1407,7 +1459,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     // 제목
     g.fillStyle='#1f3864';g.fillRect(M,y,W-2*M,titleH);
     g.fillStyle='#fff';g.font=`700 30px ${FONT}`;g.textAlign='center';g.textBaseline='middle';
-    g.fillText(`${vehicle} ${String(ym.y).slice(2)}년 ${ym.m}월 운행일보`,W/2,y+titleH/2+1);y+=titleH;
+    g.fillText(`${vehicle} ${String(o.y).slice(2)}년 ${o.m}월 운행일보`,W/2,y+titleH/2+1);y+=titleH;
     cells(data[0],y,headH,{bg:()=>'#4472c4',fg:()=>'#fff',w:600,fs:22});y+=headH;
     body.forEach((r,ri)=>{
       cells(r,y,rowH,{bg:i=>i===0?'#7f7f7f':(ri%2?'#d5e0ea':'#fff'),fg:i=>i===0?'#fff':'#111',w:600,fs});
@@ -1434,14 +1486,12 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     const rowsM=await getMonthRows(k),rowsP=await getMonthRows(`${py}-${String(pm).padStart(2,'0')}`);
     if(!rowsM.length||!window.jspdf)return null;
     try{await document.fonts.load('700 20px "IBM Plex Sans KR"');await document.fonts.load('600 20px "IBM Plex Sans KR"')}catch(e){}
-    const keep={ym,rows,prevRows};
-    ym={y,m};rows=rowsM;prevRows=rowsP;
-    try{
-      const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
-      const a=await drawSheet(),b=await drawStats();
-      pdf.addImage(a.toDataURL('image/png'),'PNG',0,0,210,297);pdf.addPage();pdf.addImage(b.toDataURL('image/png'),'PNG',0,0,210,297);
-      return new File([pdf.output('arraybuffer')],`${vehicle||'차량'}_${k}_운행일보.pdf`,{type:'application/pdf'});
-    }finally{ym=keep.ym;rows=keep.rows;prevRows=keep.prevRows}
+    // 지금 보고 있는 달(rows)은 건드리지 않고 지난달 자료만 따로 그림
+    const o={y,m,rows:rowsM,prev:rowsP};
+    const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+    const a=await drawSheet(o),b=await drawStats(o);
+    pdf.addImage(a,'PNG',0,0,210,297,undefined,'FAST');pdf.addPage();pdf.addImage(b,'PNG',0,0,210,297,undefined,'FAST');
+    return new File([pdf.output('arraybuffer')],`${vehicle||'차량'}_${k}_운행일보.pdf`,{type:'application/pdf'});
   }
   async function getBackupDone(){
     if(db){try{const s=await db.doc('settings/main').get();return s.exists?(s.data().lastBackup||''):''}catch(e){return null}}
@@ -1490,12 +1540,13 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     if(!window.jspdf){toast('PDF 도구를 불러오지 못했어요. 다시 열어 주세요');return}
     if(!rows.length){toast('이번 달 기록이 없어요');return}
     toast('PDF 만드는 중…');
+    const snap={y:ym.y,m:ym.m,rows:JSON.parse(JSON.stringify(rows)),prev:prevRows};
     try{
       const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
       for(let i=0;i<draws.length;i++){
-        const cv=await draws[i]();
+        const cv=await draws[i](snap);
         if(i>0)pdf.addPage();
-        pdf.addImage(cv.toDataURL('image/png'),'PNG',0,0,210,297);
+        pdf.addImage(cv,'PNG',0,0,210,297,undefined,'FAST'); // 압축해서 카톡으로 보내기 좋게
       }
       await downloads.save({filename,data:pdf.output('arraybuffer')});
       toast('저장했어요');
@@ -1634,6 +1685,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     openMonth();
     if(!vehicle)$('vehicleBtn').click();
     setTimeout(()=>checkMonthlyBackup().catch(()=>{}),1500);
+    setTimeout(refreshAllNames,2500);
   }
   async function useCloud(u){
     user=u;
@@ -1668,6 +1720,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     openMonth();
     if(!vehicle)$('vehicleBtn').click();
     setTimeout(()=>checkMonthlyBackup().catch(()=>{}),1500);
+    setTimeout(refreshAllNames,2500);
   }
   const AUTH_MSG={
     'auth/invalid-email':'이메일 주소 모양이 맞지 않아요',
@@ -1728,6 +1781,18 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     }
     openLogin();
   };
+
+  /* ---------- 앱을 켜 둔 채 달이 바뀌면 새 달로 ---------- */
+  let thisMonth={y:now.getFullYear(),m:now.getMonth()+1};
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden)return;
+    const t=new Date(),cur={y:t.getFullYear(),m:t.getMonth()+1};
+    if(cur.y===thisMonth.y&&cur.m===thisMonth.m)return;
+    const wasOnThisMonth=ym.y===thisMonth.y&&ym.m===thisMonth.m;
+    thisMonth=cur;
+    if(wasOnThisMonth&&$('modal').hidden){ym={...cur};openMonth();toast(`${cur.m}월이 시작됐어요. ${cur.m}월 운행일보로 넘겼어요`)}
+    bakSnooze=false;checkMonthlyBackup().catch(()=>{});
+  });
 
   /* ---------- 신호 없을 때도 열리게: 앱과 도구를 기기에 보관 ---------- */
   if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}
