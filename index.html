@@ -176,6 +176,7 @@ tbody tr.hl td{background:var(--warn)!important;transition:background 2s}
 .ytable td:first-child,.ytable th:first-child{text-align:left}
 .ytable tr.sum td{font-weight:700;border-top:2px solid var(--ink)}
 .ytable tr.none td{color:var(--muted)}
+.fixwarn{color:var(--warn-ink)}
 .monthwarn{display:block;margin-top:4px;color:var(--danger);font-weight:600}
   .guess{background:var(--warn)!important;border-color:#e0a800!important}
 .namenote{display:block;margin-top:4px;font-weight:500;color:var(--accent)}
@@ -979,6 +980,26 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     await new Promise(r=>setTimeout(r,20));
     try{return warpScan(src,findPaper(src,1400))}catch(e){src._photo=src;return src}
   }
+  /* ---------- 찍힌 화면 상태: 흔들림 · 빛 반사 · 어두움 ---------- */
+  // 종이 안쪽(가장자리 10% 뺀 곳)을 640px로 줄여서 봄
+  const qc=document.createElement('canvas'),qx=qc.getContext('2d',{willReadFrequently:true});
+  function frameQuality(src,quad){
+    const SW=src.videoWidth||src.width,SH=src.videoHeight||src.height;
+    let x0=Math.min(...quad.map(p=>p[0])),x1=Math.max(...quad.map(p=>p[0])),y0=Math.min(...quad.map(p=>p[1])),y1=Math.max(...quad.map(p=>p[1]));
+    const ix=(x1-x0)*0.12,iy=(y1-y0)*0.12;x0=Math.max(0,x0+ix);x1=Math.min(SW,x1-ix);y0=Math.max(0,y0+iy);y1=Math.min(SH,y1-iy);
+    const bw=x1-x0,bh=y1-y0;if(bw<20||bh<20)return null;
+    const k=Math.min(1,640/Math.max(bw,bh)),W=Math.max(8,Math.round(bw*k)),H=Math.max(8,Math.round(bh*k));
+    qc.width=W;qc.height=H;qx.drawImage(src,x0,y0,bw,bh,0,0,W,H);
+    const d=qx.getImageData(0,0,W,H).data,g=new Uint8Array(W*H),hist=new Uint32Array(256);
+    for(let i=0,j=0;j<g.length;i+=4,j++){const v=(d[i]*77+d[i+1]*150+d[i+2]*29)>>8;g[j]=v;hist[v]++}
+    const lh=new Uint32Array(1024);let n=0;
+    for(let y=1;y<H-1;y+=1)for(let x=1;x<W-1;x++){const p=y*W+x;const l=Math.abs(4*g[p]-g[p-1]-g[p+1]-g[p-W]-g[p+W]);lh[Math.min(1023,l)]++;n++}
+    const pct=(h,tot,q)=>{let c=0;for(let i=0;i<h.length;i++){c+=h[i];if(c>=tot*q)return i}return h.length-1};
+    const sharp=pct(lh,n,0.99),med=pct(hist,g.length,0.5),hi=pct(hist,g.length,0.9);
+    let glare=0;if(med<=238){for(let v=Math.max(250,med+12);v<256;v++)glare+=hist[v];glare/=g.length} // 종이보다 훨씬 밝게 하얗게 날아간 곳
+    return {sharp,med,glare};
+  }
+
   /* ---------- 스캔 카메라: 종이 테두리를 실시간으로 보여 주고 셔터를 누르면 바로 스캔 ---------- */
   // opts: {step:'① 상차 계근표', next:'다음: 하차 계근표', onPick:()=>{}, skipLabel:'건너뛰기'}
   // 결과: {canvas} | {pick:true} | {skip:true} | null(취소)
@@ -994,6 +1015,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       document.body.appendChild(ov);
       const video=ov.querySelector('video'),stage=ov.querySelector('.scstage'),poly=ov.querySelector('polygon'),hint=ov.querySelector('#camHint'),shot=ov.querySelector('[data-a=shot]');
       let stream=null,raf=0,quad=null,target=null,closed=false,lastDetect=0,lastFound=0,gap=90,stableSince=0,prevT=null,shooting=false;
+      let bestSharp=0,badSince=0,blurSince=0,autoFired=false,warnedBlur=0,lastQ=null;
       let auto=true;try{auto=localStorage.getItem(LS+'autoShot')!=='0'}catch(e){}
       const armAt=performance.now()+(opts.autoDelay||1500); // 열자마자 바로 찍히지 않게
       const autoBtn=ov.querySelector('[data-a=auto]');
@@ -1036,15 +1058,28 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
           // 흔들림 없이 가만히 있는지 (모서리 움직임이 화면의 1.2% 이내)
           const lim=Math.max(video.videoWidth,video.videoHeight)*0.012;
           const still=target.found&&prevT&&prevT.found&&target.every((p,i)=>Math.hypot(p[0]-prevT[i][0],p[1]-prevT[i][1])<lim);
-          if(still){if(!stableSince)stableSince=ts}else stableSince=0;
+          if(still){if(!stableSince)stableSince=ts}else{stableSince=0;bestSharp=0}
           prevT=target;
           const big=target.found&&quadArea(target)>=video.videoWidth*video.videoHeight*0.33;
+          // 흔들림 · 빛 반사 · 어두움 살피기
+          let lq=null;if(big){try{lq=frameQuality(video,target)}catch(e){}}
+          lastQ=lq;
+          if(lq&&stableSince)bestSharp=Math.max(bestSharp,lq.sharp);
+          const blurry=!!lq&&(lq.sharp<20||(bestSharp>0&&lq.sharp<bestSharp*0.6));
+          const glare=!!lq&&lq.glare>0.012,dark=!!lq&&lq.med<70;
+          if((glare||dark)&&big){if(!badSince)badSince=ts}else badSince=0;
+          if(blurry){if(!blurSince)blurSince=ts}else blurSince=0;
+          const badLong=badSince&&ts-badSince>4000; // 4초 넘게 못 고치면 그냥 찍음 (보정해서 읽어 봄)
           if(!target.found)hint.textContent='계근표가 화면에 꽉 차게 비춰 주세요';
           else if(!big)hint.textContent='조금 더 가까이 대 주세요 (숫자가 작으면 못 읽어요)';
+          else if(dark&&!badLong)hint.textContent='너무 어두워요. 밝은 쪽으로 옮기거나 실내등을 켜 주세요';
+          else if(glare&&!badLong)hint.textContent='빛이 반사돼요. 휴대폰 각도를 조금 기울여 주세요';
+          else if(blurry)hint.textContent=blurSince&&ts-blurSince>3000?'초점이 안 맞아요. 휴대폰을 조금 떨어뜨려 주세요':'흔들려요. 잠깐 멈춰 주세요';
           else if(auto&&stableSince)hint.textContent='그대로 계세요… 곧 찍어요';
           else hint.textContent=auto?'노란 선이 종이에 맞게 비추고 잠깐 가만히 계세요':'노란 선이 종이 테두리에 맞으면 셔터를 누르세요';
-          poly.classList.toggle('ready',!!(auto&&stableSince&&big));
-          if(auto&&big&&stableSince&&ts>armAt&&ts-stableSince>900){shooting=true;shot.click()}
+          const okToShoot=big&&stableSince&&!blurry&&(!(glare||dark)||badLong);
+          poly.classList.toggle('ready',!!(auto&&okToShoot));
+          if(auto&&okToShoot&&ts>armAt&&ts-stableSince>900){shooting=true;autoFired=true;shot.click()}
         }
         if(!target)return;
         if(!quad||quad.found!==target.found)quad=target.map(p=>p.slice());
@@ -1057,9 +1092,20 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         shot.disabled=true;ov.querySelector('.camflash').classList.add('on');
         const c=document.createElement('canvas');c.width=video.videoWidth;c.height=video.videoHeight;
         c.getContext('2d').drawImage(video,0,0);
-        hint.textContent='스캔하는 중…';
         await new Promise(r=>setTimeout(r,30));
-        let out;try{out=warpScan(c,findPaper(c,1400))}catch(e){c._photo=c;out=c}
+        let pq=null;try{pq=findPaper(c,1400)}catch(e){}
+        // 찍힌 사진이 흔들렸으면: 자동이면 다시 찍고, 직접 누른 거면 한 번 더 누를 때 그대로 씀
+        let fq=null;try{if(pq&&pq.found)fq=frameQuality(c,pq)}catch(e){}
+        const shaky=fq&&(fq.sharp<20||(bestSharp>0&&fq.sharp<bestSharp*0.55));
+        const wasAuto=autoFired;autoFired=false;
+        if(shaky&&(wasAuto||performance.now()-warnedBlur>4000)){
+          ov.querySelector('.camflash').classList.remove('on');
+          hint.textContent=wasAuto?'흔들렸어요. 가만히 계시면 다시 찍어요':'흔들렸어요. 다시 찍거나, 이대로 쓰려면 한 번 더 누르세요';
+          if(!wasAuto)warnedBlur=performance.now();
+          stableSince=0;bestSharp=0;shot.disabled=false;shooting=false;lastDetect=performance.now()+600;return;
+        }
+        hint.textContent='스캔하는 중…';
+        let out;try{out=warpScan(c,pq||findPaper(c,1400))}catch(e){c._photo=c;out=c}
         done({canvas:out});
       };
       navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:3840},height:{ideal:2160}}})
@@ -1196,9 +1242,12 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       const sw=src.naturalWidth||src.width,sh=src.naturalHeight||src.height,ku=1600/Math.max(sw,sh);
       const base=document.createElement('canvas');base.width=Math.round(sw*ku);base.height=Math.round(sh*ku);
       {const bx=base.getContext('2d');bx.imageSmoothingQuality='high';bx.drawImage(src,0,0,base.width,base.height)}
-      { // 흑백 + 대비 조금 올리기 (숫자가 더 잘 읽힘)
+      { // 흑백 + 대비 조금 올리기 (숫자가 더 잘 읽힘). 어둡거나 흐릿하게 찍혔으면 밝기를 먼저 넓게 펴 줌
         const g=base.getContext('2d'),im=g.getImageData(0,0,base.width,base.height),d=im.data;
-        for(let i=0;i<d.length;i+=4){let v=(d[i]*77+d[i+1]*150+d[i+2]*29)>>8;v=(v-128)*1.3+128;d[i]=d[i+1]=d[i+2]=v<0?0:v>255?255:v}
+        const hist=new Uint32Array(256);for(let i=0;i<d.length;i+=16)hist[(d[i]*77+d[i+1]*150+d[i+2]*29)>>8]++;
+        const tot=hist.reduce((a,b)=>a+b,0),pct=q=>{let c=0;for(let i=0;i<256;i++){c+=hist[i];if(c>=tot*q)return i}return 255};
+        const lo=pct(0.02),hi=pct(0.98),stretch=hi-lo<170&&hi>lo+20;
+        for(let i=0;i<d.length;i+=4){let v=(d[i]*77+d[i+1]*150+d[i+2]*29)>>8;if(stretch)v=(v-lo)*255/(hi-lo);v=(v-128)*1.3+128;d[i]=d[i+1]=d[i+2]=v<0?0:v>255?255:v}
         g.putImageData(im,0,0);
       }
       for(const deg of [0,270,90,180]){
@@ -1256,7 +1305,20 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     toks.forEach(t=>{const k=tkey(t);const e=ticketMap[role][k]=ticketMap[role][k]||{};e[name]=(e[name]||0)+1});
     if(db)db.doc('settings/tickets').set(ticketMap).catch(()=>{});else lsSet('tickets',ticketMap);
   }
-  let scanToks={};
+  let scanToks={},scanFill={};
+  // 앱이 넣은 수량을 고쳐서 저장하면 그 회사 계근표를 기억: 다음엔 "꼭 확인" 표시 + 빈 차 무게 배우기
+  function fixCount(role,toks){
+    const f=ticketMap.fix&&ticketMap.fix[role];if(!f||!toks)return 0;
+    return Math.max(0,...toks.filter(t=>/^(tel|web):/.test(t)).map(t=>f[tkey(t)]||0));
+  }
+  function learnFix(target,saved){
+    const sf=scanFill[target];if(!sf||saved==null)return;
+    if(Math.abs(saved-sf.val)<0.005)return;
+    ticketMap.fix=ticketMap.fix||{from:{},to:{}};const f=ticketMap.fix[sf.role]=ticketMap.fix[sf.role]||{};
+    (sf.toks||[]).filter(t=>/^(tel|web):/.test(t)).forEach(t=>{const k=tkey(t);f[k]=(f[k]||0)+1}); // 전화번호·홈페이지로만 회사 구분
+    if(sf.gross){const tare=Math.round((sf.gross-saved)*100)/100;if(tare>=12&&tare<=22)setTare(tare)}
+    if(db)db.doc('settings/tickets').set(ticketMap).catch(()=>{});else lsSet('tickets',ticketMap);
+  }
   // 계근표로 못 알아본 이름 짐작하기: 상차지 = 지난번 상차지, 하차지 = 그 상차지에서 가장 자주 간 곳
   function guessName(role){
     const list=[...prevRows,...rows].filter(r=>r.d);
@@ -1277,7 +1339,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   }
 
   function wireScan(){
-    scanToks={};scanBlobs={};const scanReady={};
+    scanToks={};scanBlobs={};scanFill={};const scanReady={};
     const inp=$('scanFile');if(!inp)return;
     const steps=$('fLoad')?['fLoad','fUnload']:['fUnload'];
     const LABEL={fLoad:'상차',fUnload:'하차'};
@@ -1327,6 +1389,9 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
           chips.innerHTML=opts.map(v=>`<button type="button" data-pick="${v}">${v.toFixed(2)}</button>`).join('');
         }else if(p.match){
           field.value=p.match.net.toFixed(2);field.dispatchEvent(new Event('input'));
+          scanFill[target]={val:p.match.net,gross:p.match.gross,role,toks:scanToks[target]};
+          const fixes=fixCount(role,scanToks[target]);
+          if(fixes){markGuess(field);nameNote=(nameNote?nameNote+' ':'')+`<b class="fixwarn">이 회사 계근표는 전에 숫자를 ${fixes}번 고치셨어요. 꼭 확인해 주세요.</b>`}
           let dayNote='';
           if(target==='fLoad'&&$('fD')){
             const day=ticketDay(p.text||'',ym.y,ym.m),tm=day?null:ticketOtherMonth(p.text||'',ym.y,ym.m);
@@ -1527,6 +1592,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         rows.splice(at,0,n);
       }else insertGroup([n]);
       learnName('from',scanToks.fLoad,n.from);learnName('to',scanToks.fUnload,n.to);
+      learnFix('fLoad',n.load);learnFix('fUnload',n.unload);
       saveMonth();render();close();toast('저장했어요');
     };
     setTimeout(()=>{const f=$(isSplit?'fTo':'fFrom');if(f&&!editing)f.focus()},50);
