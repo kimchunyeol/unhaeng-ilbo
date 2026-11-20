@@ -321,7 +321,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         <label>탱크 한 칸 (톤)<input id="gKanT" class="num" inputmode="decimal"></label>
         <label>허가 상차중량 (톤)<input id="gMax" class="num" inputmode="decimal"></label>
       </div>
-      <p class="hint" style="margin:0">펌핑하는 동안은 계기판이 실제보다 낮게 보여서, 그만큼 빼고 멈추게 알려 드려요. 탱크는 5칸이에요.</p>
+      <p class="hint" style="margin:0">펌핑하는 동안은 계기판이 실제보다 낮게 보여서, 그만큼 빼고 멈추게 알려 드려요. 탱크는 5칸이고 칸마다 잠글 수 있어요. 가득 실었을 때는 한 칸 = 실린 짐 ÷ 5로 계산해요.</p>
       <button type="button" id="gReset">처음 값으로 되돌리기</button>
     </div>
   </div>
@@ -637,10 +637,10 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   function drawGauge(){
     const n=v=>toNum($(v).value);
     const load=n('gLoad'),now=n('gNow'),amt=n('gAmt');
-    $('gKan').innerHTML=[1,2,3,4].map(k=>`<button type="button" data-kan="${k}">${k}칸 (${(k*gauge.kan).toFixed(1)}t)</button>`).join('');
+    const ksz=load!=null&&load>=gauge.kan*4.5?load/5:gauge.kan;
+    $('gKan').innerHTML=[1,2,3,4].map(k=>`<button type="button" data-kan="${k}">${k}칸 (${(k*ksz).toFixed(1)}t)</button>`).join('');
     $('gKan').querySelectorAll('[data-kan]').forEach(b=>b.onclick=()=>{
-      const t=+b.dataset.kan*gauge.kan;
-      $('gAmt').value=(gMode==='drop'?t:Math.max(0,t)).toFixed(1);drawGauge()});
+      $('gAmt').value=(+b.dataset.kan*ksz).toFixed(2);drawGauge()});
     const out=$('gOut');
     const over=load!=null&&gauge.max&&load>gauge.max+0.005?`<span class="hint">허가 상차중량 ${gauge.max.toFixed(1)}톤보다 <b>${(load-gauge.max).toFixed(2)}</b>톤 더 실려 있어요.</span>`:'';
     if(load==null||amt==null){out.innerHTML='<span class="hint">실린 짐과 '+(gMode==='drop'?'내릴':'남길')+' 양을 넣으면 계기판 몇에서 멈출지 알려 드려요.</span>'+over;drawTank(load||0)}
@@ -652,9 +652,18 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         const shift=now!=null?now-gaugeAt(load):0;
         const stop=gaugeAt(remain)+shift,during=stop-gauge.pump;
         const lowNote=remain<3?'<span class="hint">짐이 아주 적게 남을 때는 계산이 덜 정확해요. 계근해서 확인해 주세요.</span>':'';
-        out.innerHTML=`<span class="big">계기판 <b>${stop.toFixed(1)}</b> 에서 멈추기</span>
-          <span>내리는 중에는 <b>${during.toFixed(1)}</b> 에서 끄세요 (계기판이 ${gauge.pump}톤 낮게 보여요)</span>
-          <span>내리는 짐 <b>${drop.toFixed(2)}</b>톤 (${kanTxt(drop)}) · 남는 짐 <b>${remain.toFixed(2)}</b>톤 (${kanTxt(remain)})</span>
+        // 칸별로 잠글 수 있음: 딱 칸 수만큼이면 계기판 안 봐도 됨
+        const ks=load>=gauge.kan*4.5?load/5:gauge.kan; // 가득 실었으면 한 칸 = 실린 짐 ÷ 5
+        let full=Math.floor(drop/ks+0.03),part=drop-full*ks;
+        if(part<0.15)part=0;else if(ks-part<0.15){full++;part=0}
+        let how;
+        if(drop<0.01)how='<span class="big">내릴 짐이 없어요</span>';
+        else if(!part)how=`<span class="big">칸 <b>${full}</b>개를 다 비우세요</span><span>칸 하나에 약 ${ks.toFixed(2)}톤이라 계기판은 안 봐도 돼요. 확인용: 다 내리면 계기판 약 ${stop.toFixed(1)}</span>`;
+        else how=`<span class="big">${full?`칸 ${full}개는 다 비우고, 칸 하나는 `:'칸 하나를 열고 '}계기판 <b>${stop.toFixed(1)}</b> 에서 잠그기</span>
+          <span>${full?'마지막 칸을 ':''}내리는 중에는 <b>${during.toFixed(1)}</b> 에서 잠그세요 (계기판이 ${gauge.pump}톤 낮게 보여요). 그 칸에서 약 ${part.toFixed(2)}톤 빠져요.</span>`;
+        if(part||full){if(load<gauge.kan*4.5&&drop>=0.01)how+=`<span class="hint">앞에서 일부만 내린 칸이 있으면, 그 칸은 가득 찬 칸(약 ${ks.toFixed(1)}톤)이 아니니 빼고 생각하세요.</span>`}
+        out.innerHTML=`${how}
+          <span>내리는 짐 <b>${drop.toFixed(2)}</b>톤 · 남는 짐 <b>${remain.toFixed(2)}</b>톤</span>
           ${over}${now!=null?`<span class="hint">지금 계기판 ${now.toFixed(1)}에서 ${(now-stop).toFixed(1)}만큼 줄면 돼요.</span>`:'<span class="hint">출발 전 계기판 숫자를 넣으면 더 정확해요.</span>'}${lowNote}`;
         drawTank(remain);
       }
