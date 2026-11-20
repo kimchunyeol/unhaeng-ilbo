@@ -159,16 +159,26 @@ body.notlog #bakBox,body.notlog #sendBox,body.notlog .wrap>.tools,body.notlog #s
 .gout b{font-family:var(--num)}
 .gout.small .big b{font-size:24px}
 .gout .warn{color:var(--danger);font-weight:600}
-.tank{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;height:46px}
-.tank:empty{display:none}
-.tank span{border:2px solid var(--navy);border-radius:8px;background:var(--paper);position:relative;overflow:hidden;display:grid;place-items:center;font-family:var(--num);font-size:12px;font-weight:600}
-.tank span i{position:absolute;left:0;right:0;bottom:0;background:var(--band);opacity:.55}
-.tank span em{position:relative;font-style:normal}
+.tankwrap{display:flex;flex-direction:column;gap:6px}
+.tankhd{display:flex;justify-content:space-between;align-items:center;font-size:14px}
+.tankhd button{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:5px 10px;font-size:13px}
+.tank{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.kan{border:2px solid var(--navy);border-radius:10px;background:var(--paper);position:relative;overflow:hidden;height:92px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:4px 2px}
+.kan .lvl{position:absolute;left:0;right:0;bottom:0;background:var(--band);opacity:.35;transition:height .2s}
+.kan .kno{position:relative;font-weight:700;font-size:13px}
+.kan input{position:relative;width:100%;min-width:0;text-align:center;font-family:var(--num);font-size:15px;font-weight:600;border:1px solid var(--line);border-radius:6px;padding:5px 0;background:var(--paper);color:var(--ink)}
+.kan .step{position:relative;font-size:11px;font-weight:700;min-height:1.3em;text-align:center;line-height:1.2}
+.kan.full{border-color:#e0a800}.kan.full .step{color:var(--warn-ink)}
+.kan.part{border-color:var(--danger);border-width:3px}.kan.part .step{color:var(--danger)}
+.tankax{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.plan{margin:0;padding-left:1.4em;display:flex;flex-direction:column;gap:6px;font-size:15px}
+.plan li b{font-family:var(--num)}
 .gpts{display:flex;flex-direction:column;gap:4px;font-size:14px}
 .gpts div{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 2px;border-bottom:1px solid var(--line);font-family:var(--num)}
 .gpts button{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:4px 10px;font-size:13px}
 #gaugeView details summary{cursor:pointer;font-weight:600;color:var(--accent);padding:4px 0}
 #gaugeView>.box+.box{margin-top:12px}
+#gDone{width:100%}
 #gaugeView button.primary,#gReset{border-radius:10px;padding:12px;font-weight:700;border:1px solid var(--line)}
 #gaugeView button.primary{background:var(--navy);color:var(--navy-ink);border-color:var(--navy)}
 #gReset{background:var(--paper);color:var(--muted)}
@@ -298,9 +308,13 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       </div>
       <div class="seg" role="group" aria-label="계산 방법"><button type="button" data-gm="drop" aria-pressed="true">내릴 양</button><button type="button" data-gm="keep" aria-pressed="false">남길 양</button></div>
       <label class="gamt"><span id="gAmtLbl">내릴 양 (톤)</span><input id="gAmt" class="num" inputmode="decimal" placeholder="4"></label>
-      <div class="chips" id="gKan"></div>
+      <div class="tankwrap">
+        <div class="tankhd"><b>칸마다 지금 실린 짐 (톤)</b><button type="button" id="gEven">5칸 똑같이</button></div>
+        <div class="tank" id="gTank"></div>
+        <div class="tankax"><span>← 운전석</span><span>뒤 →</span></div>
+      </div>
       <div id="gOut" class="gout" aria-live="polite"></div>
-      <div class="tank" id="gTank" aria-hidden="true"></div>
+      <button type="button" id="gDone" class="primary" hidden>이대로 내렸어요 · 칸 숫자 바꾸기</button>
     </div>
     <div class="box">
       <h3>계기판 → 남은 짐</h3>
@@ -607,7 +621,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   // 계기판은 3·4·5축만 잼 (1·2축 무게는 안 잡힘). 실제 잰 (계기판, 실제 짐) 점들을 이어서 계산
   const GAUGE_DEF={pts:[[15.9,8.4],[23.7,19.54],[26.3,23.04]],pump:0.3,kan:4.6,max:21.8};
   let gauge=JSON.parse(JSON.stringify(GAUGE_DEF)),gMode='drop';
-  function setGauge(g){if(g&&Array.isArray(g.pts)&&g.pts.length>=2)gauge={pts:g.pts,pump:g.pump??0.3,kan:g.kan??4.6,max:g.max??21.8};if(view==='gauge')drawGauge()}
+  function setGauge(g){if(g&&Array.isArray(g.pts)&&g.pts.length>=2)gauge={pts:g.pts,pump:g.pump??0.3,kan:g.kan??4.6,max:g.max??21.8,tank:g.tank||null};if(view==='gauge')drawGauge()}
   function saveGauge(){
     if(db)db.doc('settings/main').set({gauge},{merge:true}).catch(()=>toast('저장하지 못했어요'));
     else{const st=lsGet('settings')||{};st.gauge=gauge;lsSet('settings',st)}
@@ -621,10 +635,48 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   const cargoAt=g=>interp(g,gPts(),0,1);
   const gaugeAt=c=>interp(c,gPts().slice().sort((a,b)=>a[1]-b[1]),1,0);
   const kanTxt=t=>{const k=t/gauge.kan;return k<0.05?'0칸':`약 ${k>=0.95&&Math.abs(k-Math.round(k))<0.08?Math.round(k):k.toFixed(1)}칸`};
-  function drawTank(remain){
-    const cells=[];let left=Math.max(0,remain);
-    for(let i=0;i<5;i++){const f=Math.max(0,Math.min(1,left/gauge.kan));left-=gauge.kan;cells.push(f)}
-    $('gTank').innerHTML=cells.map((f,i)=>`<span><i style="height:${Math.round(f*100)}%"></i><em>${f>=0.999?'가득':f<=0.001?'빈 칸':Math.round(f*100)+'%'}</em></span>`).join('');
+  // 칸 (1번 = 운전석 쪽, 5번 = 맨 뒤). 칸마다 지금 실린 짐
+  let tank=null,lastPlan=null;
+  const tankSum=()=>tank.reduce((a,b)=>a+b,0);
+  function evenTank(load){tank=[0,0,0,0,0].map(()=>Math.round(load/5*100)/100);const d=Math.round((load-tankSum())*100)/100;tank[4]=Math.round((tank[4]+d)*100)/100}
+  let tankSaveT=null;
+  function saveTank(){clearTimeout(tankSaveT);tankSaveT=setTimeout(()=>{gauge.tank=tank.slice();saveGauge()},600)}
+  function buildTank(){
+    $('gTank').innerHTML=tank.map((v,i)=>`<div class="kan" data-i="${i}"><i class="lvl"></i><span class="kno">${i+1}번</span><input data-k="${i}" inputmode="decimal" aria-label="${i+1}번 칸 톤" value="${v?v.toFixed(2):'0'}"><b class="step"></b></div>`).join('');
+    $('gTank').querySelectorAll('input[data-k]').forEach(inp=>{
+      inp.addEventListener('focus',()=>inp.select());
+      inp.addEventListener('input',()=>{const v=toNum(inp.value);tank[+inp.dataset.k]=v!=null&&v>=0?v:0;$('gLoad').value=tankSum().toFixed(2);saveTank();drawGauge()});
+    });
+  }
+  // 내릴 양 D 맞추기: 칸 통째로 비우기 + (필요하면) 계기판 보고 잠글 칸 하나
+  // 잠글 칸은 짐이 남은 가장 뒤 칸 (계기판이 3·4·5축만 재서 뒤 칸일수록 정확), 통째로 비울 칸은 앞쪽부터
+  function planUnload(D){
+    const idx=[0,1,2,3,4].filter(i=>tank[i]>0.05);let best=null;
+    const better=(a,b)=>{if(!b)return true;
+      if(!a.part!==!b.part)return !a.part;
+      if(!a.part)return Math.abs(a.err-b.err)>0.01?a.err<b.err:a.pos<b.pos;
+      if(a.part.i!==b.part.i)return a.part.i>b.part.i;
+      if(Math.abs(a.S-b.S)>0.01)return a.S>b.S;
+      return a.pos<b.pos};
+    for(let m=0;m<(1<<idx.length);m++){
+      const full=idx.filter((_,j)=>m&(1<<j)),S=full.reduce((a,i)=>a+tank[i],0),pos=full.reduce((a,i)=>a+i,0);
+      if(Math.abs(S-D)<=0.15){const c={full,part:null,S,err:Math.abs(S-D),pos};if(better(c,best))best=c;continue}
+      if(S>D)continue;
+      const need=D-S;
+      for(let k=idx.length-1;k>=0;k--){const i=idx[k];if(full.includes(i))continue;
+        if(tank[i]>=need+0.15){const c={full,part:{i,amt:need},S,pos};if(better(c,best))best=c;break}}
+    }
+    return best;
+  }
+  function markTank(plan){
+    $('gTank').querySelectorAll('.kan').forEach(el=>{const i=+el.dataset.i;
+      el.querySelector('.lvl').style.height=Math.round(Math.max(0,Math.min(1,tank[i]/Math.max(gauge.kan,5)))*100)+'%';
+      el.classList.remove('full','part');const st=el.querySelector('.step');st.textContent='';
+      if(!plan)return;
+      const k=plan.full.indexOf(i);
+      if(k>=0){el.classList.add('full');st.textContent=`${'①②③④⑤'[k]} 다 비움`}
+      else if(plan.part&&plan.part.i===i){el.classList.add('part');st.textContent=`${'①②③④⑤'[plan.full.length]} 잠금`}
+    });
   }
   function lastLoad(){
     const list=[...prevRows,...rows];
@@ -632,43 +684,45 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     return null;
   }
   function openGauge(){
-    if(!$('gLoad').value){const l=lastLoad();if(l)$('gLoad').value=l.toFixed(2)}
+    if(!tank){
+      if(Array.isArray(gauge.tank)&&gauge.tank.length===5&&gauge.tank.some(v=>v>0))tank=gauge.tank.map(Number);
+      else evenTank(lastLoad()||0);
+    }
+    $('gLoad').value=tankSum()?tankSum().toFixed(2):'';buildTank();
     $('gPump').value=gauge.pump;$('gKanT').value=gauge.kan;$('gMax').value=gauge.max;
     drawGauge();
   }
   function drawGauge(){
     const n=v=>toNum($(v).value);
-    const load=n('gLoad'),now=n('gNow'),amt=n('gAmt');
-    const ksz=load!=null&&load>=gauge.kan*4.5?load/5:gauge.kan;
-    $('gKan').innerHTML=[1,2,3,4].map(k=>`<button type="button" data-kan="${k}">${k}칸 (${(k*ksz).toFixed(1)}t)</button>`).join('');
-    $('gKan').querySelectorAll('[data-kan]').forEach(b=>b.onclick=()=>{
-      $('gAmt').value=(+b.dataset.kan*ksz).toFixed(2);drawGauge()});
-    const out=$('gOut');
-    const over=load!=null&&gauge.max&&load>gauge.max+0.005?`<span class="hint">허가 상차중량 ${gauge.max.toFixed(1)}톤보다 <b>${(load-gauge.max).toFixed(2)}</b>톤 더 실려 있어요.</span>`:'';
-    if(load==null||amt==null){out.innerHTML='<span class="hint">실린 짐과 '+(gMode==='drop'?'내릴':'남길')+' 양을 넣으면 계기판 몇에서 멈출지 알려 드려요.</span>'+over;drawTank(load||0)}
+    if(!tank){const l=n('gLoad');evenTank(l||0);buildTank()}
+    const load=tankSum(),now=n('gNow'),amt=n('gAmt');
+    const out=$('gOut');lastPlan=null;$('gDone').hidden=true;
+    const over=gauge.max&&load>gauge.max+0.005?`<span class="hint">허가 상차중량 ${gauge.max.toFixed(1)}톤보다 <b>${(load-gauge.max).toFixed(2)}</b>톤 더 실려 있어요.</span>`:'';
+    if(!load||amt==null){out.innerHTML='<span class="hint">칸마다 실린 짐을 확인하고 '+(gMode==='drop'?'내릴':'남길')+' 양을 넣으면, 어느 칸부터 열고 계기판 몇에서 잠글지 알려 드려요.</span>'+over;markTank(null)}
     else{
       const remain=gMode==='drop'?load-amt:amt,drop=load-remain;
-      if(remain<0||drop<0){out.innerHTML=`<span class="warn">${gMode==='drop'?'내릴 양이 실린 짐보다 많아요':'남길 양이 실린 짐보다 많아요'}</span>`;drawTank(load)}
+      if(remain<-0.005||drop<-0.005){out.innerHTML=`<span class="warn">${gMode==='drop'?'내릴 양이 실린 짐보다 많아요':'남길 양이 실린 짐보다 많아요'}</span>`;markTank(null)}
+      else if(drop<0.01){out.innerHTML='<span class="big">내릴 짐이 없어요</span>';markTank(null)}
       else{
-        // 지금 계기판을 넣으면 그 숫자에서 줄어드는 만큼으로 계산 (차마다·날마다 차이를 줄임)
+        // 지금 계기판을 넣으면 그 숫자에서 줄어드는 만큼으로 계산 (날마다 차이를 줄임)
         const shift=now!=null?now-gaugeAt(load):0;
-        const stop=gaugeAt(remain)+shift,during=stop-gauge.pump;
-        const lowNote=remain<3?'<span class="hint">짐이 아주 적게 남을 때는 계산이 덜 정확해요. 계근해서 확인해 주세요.</span>':'';
-        // 칸별로 잠글 수 있음: 딱 칸 수만큼이면 계기판 안 봐도 됨
-        const ks=load>=gauge.kan*4.5?load/5:gauge.kan; // 가득 실었으면 한 칸 = 실린 짐 ÷ 5
-        let full=Math.floor(drop/ks+0.03),part=drop-full*ks;
-        if(part<0.15)part=0;else if(ks-part<0.15){full++;part=0}
-        let how;
-        if(drop<0.01)how='<span class="big">내릴 짐이 없어요</span>';
-        else if(!part)how=`<span class="big">칸 <b>${full}</b>개를 다 비우세요</span><span>칸 하나에 약 ${ks.toFixed(2)}톤이라 계기판은 안 봐도 돼요. 확인용: 다 내리면 계기판 약 ${stop.toFixed(1)}</span>`;
-        else how=`<span class="big">${full?`칸 ${full}개는 다 비우고, 칸 하나는 `:'칸 하나를 열고 '}계기판 <b>${stop.toFixed(1)}</b> 에서 잠그기</span>
-          <span>계기판 보고 잠글 칸은 <b>짐이 남은 가장 뒤 칸</b>(5번 쪽)으로 하세요. 뒤 칸일수록 계기판이 크게 움직여서 정확해요.</span>
-          <span>${full?'마지막 칸을 ':''}내리는 중에는 <b>${during.toFixed(1)}</b> 에서 잠그세요 (계기판이 ${gauge.pump}톤 낮게 보여요). 그 칸에서 약 ${part.toFixed(2)}톤 빠져요.</span>`;
-        if(part||full){if(load<gauge.kan*4.5&&drop>=0.01)how+=`<span class="hint">앞에서 일부만 내린 칸이 있으면, 그 칸은 가득 찬 칸(약 ${ks.toFixed(1)}톤)이 아니니 빼고 생각하세요.</span>`}
-        out.innerHTML=`${how}
-          <span>내리는 짐 <b>${drop.toFixed(2)}</b>톤 · 남는 짐 <b>${remain.toFixed(2)}</b>톤</span>
-          ${over}${now!=null?`<span class="hint">지금 계기판 ${now.toFixed(1)}에서 ${(now-stop).toFixed(1)}만큼 줄면 돼요.</span>`:'<span class="hint">출발 전 계기판 숫자를 넣으면 더 정확해요.</span>'}${lowNote}`;
-        drawTank(remain);
+        const stop=gaugeAt(Math.max(0,remain))+shift,during=stop-gauge.pump;
+        const plan=planUnload(drop);lastPlan=plan&&{plan,stop};
+        let steps='';
+        if(!plan)steps='<span class="warn">칸 숫자로는 맞출 방법을 못 찾았어요. 칸마다 실린 짐을 확인해 주세요.</span>';
+        else{
+          const li=plan.full.map(i=>`<li><b>${i+1}번 칸</b> 다 비우기 <small>(${tank[i].toFixed(2)}톤)</small></li>`);
+          if(plan.part)li.push(`<li><b>${plan.part.i+1}번 칸</b> 열고 계기판 <b>${stop.toFixed(1)}</b>에서 잠그기<br><small>내리는 중에는 <b>${during.toFixed(1)}</b>에서 잠그세요 (계기판이 ${gauge.pump}톤 낮게 보여요) · 이 칸에서 약 ${plan.part.amt.toFixed(2)}톤</small></li>`);
+          steps=`<span class="big">${plan.part?`${plan.part.i+1}번 칸은 계기판 <b>${stop.toFixed(1)}</b>에서 잠그기`:'칸만 비우면 돼요'}</span><ol class="plan">${li.join('')}</ol>
+            ${!plan.part?`<span class="hint">계기판은 안 봐도 돼요. 확인용: 다 내리면 계기판 약 ${stop.toFixed(1)}</span>`:''}
+            ${plan.part&&plan.full.length?'<span class="hint">다 비울 칸을 먼저 내리고, 잠글 칸은 맨 마지막에 여세요.</span>':''}
+            ${plan.part&&plan.part.i<3?'<span class="hint">뒤쪽 칸이 비어 있어서 앞쪽 칸으로 맞춰요. 앞 칸은 계기판이 적게 움직여서 덜 정확해요. 계근으로 꼭 확인해 주세요.</span>':''}`;
+          $('gDone').hidden=false;
+        }
+        out.innerHTML=`${steps}
+          <span>내리는 짐 <b>${drop.toFixed(2)}</b>톤 · 남는 짐 <b>${Math.max(0,remain).toFixed(2)}</b>톤</span>
+          ${over}${plan&&plan.part?(now!=null?`<span class="hint">지금 계기판 ${now.toFixed(1)}에서 ${(now-stop).toFixed(1)}만큼 줄면 돼요.</span>`:'<span class="hint">출발 전 계기판 숫자를 넣으면 더 정확해요.</span>'):''}${remain<3&&plan&&plan.part?'<span class="hint">짐이 아주 적게 남을 때는 계산이 덜 정확해요. 계근해서 확인해 주세요.</span>':''}`;
+        markTank(plan);
       }
     }
     const rv=n('gRev');
@@ -679,7 +733,19 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     $('gPts').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{const [g,c]=b.dataset.del.split('|').map(Number);
       gauge.pts=gauge.pts.filter(p=>!(p[0]===g&&p[1]===c));saveGauge();drawGauge();toast('지웠어요')});
   }
-  ['gLoad','gNow','gAmt','gRev'].forEach(id=>$(id).addEventListener('input',drawGauge));
+  ['gNow','gAmt','gRev'].forEach(id=>$(id).addEventListener('input',drawGauge));
+  // 실린 짐을 새로 넣으면 = 새로 실음: 5칸에 똑같이 나눔
+  $('gLoad').addEventListener('input',()=>{const v=toNum($('gLoad').value);evenTank(v&&v>0?v:0);buildTank();saveTank();drawGauge()});
+  $('gEven').onclick=()=>{evenTank(tankSum());buildTank();saveTank();drawGauge();toast('5칸에 똑같이 나눴어요')};
+  $('gDone').onclick=()=>{
+    if(!lastPlan)return;const {plan,stop}=lastPlan;
+    plan.full.forEach(i=>tank[i]=0);if(plan.part)tank[plan.part.i]=Math.max(0,Math.round((tank[plan.part.i]-plan.part.amt)*100)/100);
+    $('gLoad').value=tankSum().toFixed(2);$('gAmt').value='';$('gNow').value=tankSum()>0.05?stop.toFixed(1):'';
+    if(plan.part)$('gpK').value=String(plan.part.i+1);
+    buildTank();gauge.tank=tank.slice();saveGauge();drawGauge();
+    toast('칸 숫자를 바꿨어요. 계근표가 나오면 아래 “계근 결과로 맞추기”에 넣어 주세요');
+  };
+
   document.querySelectorAll('[data-gm]').forEach(b=>b.onclick=()=>{
     gMode=b.dataset.gm;document.querySelectorAll('[data-gm]').forEach(x=>x.setAttribute('aria-pressed',x===b));
     $('gAmtLbl').textContent=gMode==='drop'?'내릴 양 (톤)':'남길 양 (톤)';$('gAmt').value='';drawGauge()});
@@ -695,7 +761,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
   $('gReset').onclick=()=>{
     const b=$('gReset');if(!b.dataset.armed){b.dataset.armed='1';b.textContent='한 번 더 누르면 되돌려요';setTimeout(()=>{delete b.dataset.armed;b.textContent='처음 값으로 되돌리기'},3000);return}
     delete b.dataset.armed;b.textContent='처음 값으로 되돌리기';
-    gauge=JSON.parse(JSON.stringify(GAUGE_DEF));saveGauge();openGauge();toast('처음 값으로 되돌렸어요')};
+    gauge=JSON.parse(JSON.stringify(GAUGE_DEF));tank=null;saveGauge();openGauge();toast('처음 값으로 되돌렸어요')};
 
   /* ---------- 1년 통계 ---------- */
   let statMode='month',statYear=null,yearPick=null;
