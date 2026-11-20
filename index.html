@@ -672,6 +672,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     $('gTank').querySelectorAll('.kan').forEach(el=>{const i=+el.dataset.i;
       el.querySelector('.lvl').style.height=Math.round(Math.max(0,Math.min(1,tank[i]/Math.max(gauge.kan,5)))*100)+'%';
       el.classList.remove('full','part');const st=el.querySelector('.step');st.textContent='';
+      if(plan&&tank[i]>0.05&&!plan.full.includes(i)&&!(plan.part&&plan.part.i===i))st.textContent='🔒 잠가 둠';
       if(!plan)return;
       const k=plan.full.indexOf(i);
       if(k>=0){el.classList.add('full');st.textContent=`${'①②③④⑤'[k]} 다 비움`}
@@ -713,6 +714,8 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         else{
           const li=plan.full.map(i=>`<li><b>${i+1}번 칸</b> 다 비우기 <small>(${tank[i].toFixed(2)}톤)</small></li>`);
           if(plan.part)li.push(`<li><b>${plan.part.i+1}번 칸</b> 열고 계기판 <b>${stop.toFixed(1)}</b>에서 잠그기<br><small>내리는 중에는 <b>${during.toFixed(1)}</b>에서 잠그세요 (계기판이 ${gauge.pump}톤 낮게 보여요) · 이 칸에서 약 ${plan.part.amt.toFixed(2)}톤</small></li>`);
+          const keepShut=[0,1,2,3,4].filter(i=>tank[i]>0.05&&!plan.full.includes(i)&&!(plan.part&&plan.part.i===i));
+          if(keepShut.length)li.push(`<li style="list-style:none;margin-left:-1.4em">🔒 <b>${keepShut.map(i=>i+1+'번').join(' · ')} 칸</b>은 계속 잠가 두세요 (안 열어요)</li>`);
           steps=`<span class="big">${plan.part?`${plan.part.i+1}번 칸은 계기판 <b>${stop.toFixed(1)}</b>에서 잠그기`:'칸만 비우면 돼요'}</span><ol class="plan">${li.join('')}</ol>
             ${!plan.part?`<span class="hint">계기판은 안 봐도 돼요. 확인용: 다 내리면 계기판 약 ${stop.toFixed(1)}</span>`:''}
             ${plan.part&&plan.full.length?'<span class="hint">다 비울 칸을 먼저 내리고, 잠글 칸은 맨 마지막에 여세요.</span>':''}
