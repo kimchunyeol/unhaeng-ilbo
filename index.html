@@ -150,6 +150,7 @@ body.notlog #bakBox,body.notlog #sendBox,body.notlog .wrap>.tools,body.notlog #s
 .ggrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
 .ggrid label,.gamt{display:flex;flex-direction:column;gap:6px;font-weight:700;font-size:14px}
 .ggrid label small{font-weight:500;color:var(--muted);font-size:12px}
+.ggrid select{font:inherit;font-size:18px;padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);width:100%}
 .ggrid input,.gamt input{font:inherit;font-family:var(--num);font-size:18px;padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
 .gout{background:var(--chip);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px;font-size:15px}
 .gout:empty{display:none}
@@ -313,6 +314,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
       <div class="ggrid">
         <label>계기판 (멈춘 뒤)<input id="gpG" class="num" inputmode="decimal" placeholder="23.7"></label>
         <label>실제 짐 (톤)<input id="gpC" class="num" inputmode="decimal" placeholder="19.54"></label>
+        <label>마지막에 연 칸 (선택)<select id="gpK" class="num"><option value="">모름</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
       </div>
       <button type="button" id="gpAdd" class="primary">맞추기에 넣기</button>
       <div id="gPts" class="gpts"></div>
@@ -321,7 +323,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         <label>탱크 한 칸 (톤)<input id="gKanT" class="num" inputmode="decimal"></label>
         <label>허가 상차중량 (톤)<input id="gMax" class="num" inputmode="decimal"></label>
       </div>
-      <p class="hint" style="margin:0">펌핑하는 동안은 계기판이 실제보다 낮게 보여서, 그만큼 빼고 멈추게 알려 드려요. 탱크는 5칸이고 칸마다 잠글 수 있어요. 가득 실었을 때는 한 칸 = 실린 짐 ÷ 5로 계산해요.</p>
+      <p class="hint" style="margin:0">펌핑하는 동안은 계기판이 실제보다 낮게 보여서, 그만큼 빼고 멈추게 알려 드려요. 탱크는 5칸(1번이 운전석 쪽)이고 칸마다 잠글 수 있어요. 연 칸을 같이 적어 두면, 쌓인 뒤 칸마다 따로 계산하게 바꿀 수 있어요. 가득 실었을 때는 한 칸 = 실린 짐 ÷ 5로 계산해요.</p>
       <button type="button" id="gReset">처음 값으로 되돌리기</button>
     </div>
   </div>
@@ -660,6 +662,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
         if(drop<0.01)how='<span class="big">내릴 짐이 없어요</span>';
         else if(!part)how=`<span class="big">칸 <b>${full}</b>개를 다 비우세요</span><span>칸 하나에 약 ${ks.toFixed(2)}톤이라 계기판은 안 봐도 돼요. 확인용: 다 내리면 계기판 약 ${stop.toFixed(1)}</span>`;
         else how=`<span class="big">${full?`칸 ${full}개는 다 비우고, 칸 하나는 `:'칸 하나를 열고 '}계기판 <b>${stop.toFixed(1)}</b> 에서 잠그기</span>
+          <span>계기판 보고 잠글 칸은 <b>짐이 남은 가장 뒤 칸</b>(5번 쪽)으로 하세요. 뒤 칸일수록 계기판이 크게 움직여서 정확해요.</span>
           <span>${full?'마지막 칸을 ':''}내리는 중에는 <b>${during.toFixed(1)}</b> 에서 잠그세요 (계기판이 ${gauge.pump}톤 낮게 보여요). 그 칸에서 약 ${part.toFixed(2)}톤 빠져요.</span>`;
         if(part||full){if(load<gauge.kan*4.5&&drop>=0.01)how+=`<span class="hint">앞에서 일부만 내린 칸이 있으면, 그 칸은 가득 찬 칸(약 ${ks.toFixed(1)}톤)이 아니니 빼고 생각하세요.</span>`}
         out.innerHTML=`${how}
@@ -672,7 +675,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     $('gRevOut').innerHTML=rv==null?'':(()=>{const c=cargoAt(rv);return c<0.3?'<span class="big">거의 빈 차</span>':`<span class="big">남은 짐 <b>${c.toFixed(1)}</b>톤</span><span>${kanTxt(c)}</span>`})();
     const rowsT=[];for(let g=26.5;g>=9.99;g-=0.5){const c=cargoAt(g);rowsT.push(`<tr><td>${g.toFixed(1)}</td><td>${c<0.3?'거의 빈 차':c.toFixed(1)+'톤'}</td><td>${c<0.3?'-':(c/gauge.kan).toFixed(1)}</td></tr>`)}
     $('gTable').innerHTML=rowsT.join('');
-    $('gPts').innerHTML=gPts().slice().reverse().map(p=>`<div><span>계기판 ${p[0].toFixed(1)} → 짐 ${p[1].toFixed(2)}톤</span>${gauge.pts.length>2?`<button type="button" data-del="${p[0]}|${p[1]}">지우기</button>`:''}</div>`).join('');
+    $('gPts').innerHTML=gPts().slice().reverse().map(p=>`<div><span>계기판 ${p[0].toFixed(1)} → 짐 ${p[1].toFixed(2)}톤${p[2]?` <small>(${p[2]}번 칸)</small>`:''}</span>${gauge.pts.length>2?`<button type="button" data-del="${p[0]}|${p[1]}">지우기</button>`:''}</div>`).join('');
     $('gPts').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{const [g,c]=b.dataset.del.split('|').map(Number);
       gauge.pts=gauge.pts.filter(p=>!(p[0]===g&&p[1]===c));saveGauge();drawGauge();toast('지웠어요')});
   }
@@ -684,7 +687,7 @@ p.scmsg small{display:block;font-weight:500;color:var(--muted);font-family:var(-
     const g=toNum($('gpG').value),c=toNum($('gpC').value);
     if(g==null||c==null||g<5||g>40||c<0||c>30){toast('계기판과 실제 짐을 맞게 넣어 주세요');return}
     gauge.pts=gauge.pts.filter(p=>Math.abs(p[0]-g)>=0.05); // 같은 계기판 숫자는 새 값으로
-    gauge.pts.push([g,c]);saveGauge();$('gpG').value='';$('gpC').value='';drawGauge();toast('넣었어요. 계산이 새 숫자로 바뀌었어요');
+    const kk=+$('gpK').value||0;gauge.pts.push(kk?[g,c,kk]:[g,c]);saveGauge();$('gpG').value='';$('gpC').value='';$('gpK').value='';drawGauge();toast('넣었어요. 계산이 새 숫자로 바뀌었어요');
   };
   $('gPump').addEventListener('change',()=>{const v=toNum($('gPump').value);if(v!=null&&v>=0&&v<2){gauge.pump=v;saveGauge();drawGauge()}});
   $('gKanT').addEventListener('change',()=>{const v=toNum($('gKanT').value);if(v!=null&&v>1&&v<10){gauge.kan=v;saveGauge();drawGauge()}});
